@@ -11,7 +11,9 @@ import tempfile
 
 import sys
 import os
-import source
+from typing import TypeVar, Mapping
+import cxopen
+from source import Expr, ExprNum, ExprOp, ExprVar, Function, NodeBasic, NodeCall, NodeCond, NodeEmpty, Operator, Update, convert_function
 
 import syntax
 from typing_extensions import assert_never
@@ -307,8 +309,9 @@ def make_and_open_image(filepath: str) -> None:
         exit(3)
 
     assert p.returncode == 0, (p.returncode, p.stderr.read())
+    cmd = cxopen.get_command_for_open()
     p = subprocess.Popen(
-        ["xdg-open", filepath + ".png"],
+        [cmd, filepath + ".png"],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )

@@ -11,13 +11,12 @@ import tempfile
 
 import sys
 import os
-from typing import TypeVar, Mapping
-import cxopen
-from source import Expr, ExprNum, ExprOp, ExprVar, Function, NodeBasic, NodeCall, NodeCond, NodeEmpty, Operator, Update, convert_function
+import source
 
 import syntax
 from typing_extensions import assert_never
 import assume_prove
+import cxopen
 
 
 def pretty_name(name: source.VarNameKind) -> str:

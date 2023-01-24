@@ -2,7 +2,7 @@
 import sys
 
 
-def get_command_for_open():
+def get_command_for_open() -> str:
     if sys.platform == 'win32':
         return 'start'
     elif sys.platform == 'darwin':

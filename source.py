@@ -124,7 +124,11 @@ class TypeWordArray:
     """
 
 
-Type = TypeStruct | TypeBitVec | TypePtr | TypeArray | TypeFloatingPoint | TypeBuiltin | TypeWordArray
+class TypeSort(NamedTuple):
+    name: str
+
+
+Type = TypeStruct | TypeBitVec | TypePtr | TypeArray | TypeFloatingPoint | TypeBuiltin | TypeWordArray | TypeSort
 
 
 def pretty_type_ascii(typ: Type) -> str:
@@ -144,13 +148,18 @@ def pretty_type_ascii(typ: Type) -> str:
         return str(typ)
     elif isinstance(typ, TypeWordArray):
         return str(typ)
+    elif isinstance(typ, TypeSort):
+        return str(f"sort-{typ.name}")
     assert_never(typ)
 
 
 type_bool: Type = TypeBuiltin(Builtin.BOOL)
 type_mem: Type = TypeBuiltin(Builtin.MEM)
+type_pms: Type = TypeBuiltin(Builtin.PMS)
+type_htd: Type = TypeBuiltin(Builtin.HTD)
 type_word8 = TypeBitVec(8)
 type_word32 = TypeBitVec(32)
+type_word61 = TypeBitVec(61)
 type_word64 = TypeBitVec(64)
 
 

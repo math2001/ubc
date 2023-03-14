@@ -13,6 +13,8 @@ sub = source.expr_sub
 slt = source.expr_slt
 sle = source.expr_sle
 eq = source.expr_eq
+def neq(a, b): return source.expr_negate(source.expr_eq(a, b))
+
 
 T = source.expr_true
 F = source.expr_false
@@ -40,6 +42,22 @@ def i32v(name: str) -> source.ExprVarT[source.HumanVarName]:
     return source.ExprVar(source.type_word32, source.HumanVarName(source.HumanVarNameSubject(name), use_guard=False, path=()))
 
 
+def htd_assigned() -> source.ExprVarT[source.HumanVarName]:
+    return source.ExprVar(source.type_bool, source.HumanVarName(source.HumanVarNameSubject('HTD'), use_guard=True, path=()))
+
+
+def mem_assigned() -> source.ExprVarT[source.HumanVarName]:
+    return source.ExprVar(source.type_bool, source.HumanVarName(source.HumanVarNameSubject('Mem'), use_guard=True, path=()))
+
+
+def pms_assigned() -> source.ExprVarT[source.HumanVarName]:
+    return source.ExprVar(source.type_bool, source.HumanVarName(source.HumanVarNameSubject('PMS'), use_guard=True, path=()))
+
+
+def ghost_asserts_assigned() -> source.ExprVarT[source.HumanVarName]:
+    return source.ExprVar(source.type_bool, source.HumanVarName(source.HumanVarNameSubject('GhostAssertions'), use_guard=True, path=()))
+
+
 def i64v(name: str) -> source.ExprVarT[source.HumanVarName]:
     return source.ExprVar(source.type_word64, source.HumanVarName(source.HumanVarNameSubject(name), use_guard=False, path=()))
 
@@ -47,6 +65,10 @@ def i64v(name: str) -> source.ExprVarT[source.HumanVarName]:
 def i64(n: int) -> source.ExprNumT:
     assert -0x8000_0000_0000_0000 <= n and n <= 0x7fff_ffff_ffff_ffff
     return source.ExprNum(source.type_word64, n)
+
+
+def boolv(n: str, guard: bool) -> source.ExprVarT[source.HumanVarName]:
+    return source.ExprVar(source.type_bool, source.HumanVarName(source.HumanVarNameSubject(n), use_guard=guard, path=()))
 
 
 def g(name: str) -> source.ExprVarT[source.HumanVarName]:
@@ -70,6 +92,14 @@ def sbounded(var: source.ExprVarT[source.HumanVarName], lower: source.ExprT[sour
 
 def lh(x: str) -> source.LoopHeaderName:
     return source.LoopHeaderName(source.NodeName(x))
+
+
+def charv(n: str) -> source.ExprVarT[source.HumanVarName]:
+    return source.ExprVar(source.type_word8, source.HumanVarName(source.HumanVarNameSubject(n), use_guard=False, path=()))
+
+
+def char(n: int) -> source.ExprNumT:
+    return source.ExprNum(source.type_word8, n)
 
 
 universe = {
@@ -120,4 +150,34 @@ universe = {
             postcondition=eq(i32ret, udiv(i32v('n'), i32(2))),
         )
     },
+    "./examples/libsel4cp_trunc.txt": {
+        "libsel4cp.handler_loop": source.Ghost(
+            loop_invariants={lh('3'):
+                             conjs(
+                                       eq(neq(charv('have_reply'), char(0)), neq(g('reply_tag'), source.expr_false)),
+                                       source.expr_implies(
+                                            eq(g('is_endpoint'), T),
+                                            eq(neq(i64v('is_endpoint'), i64(0)), neq(charv('have_reply'), char(0)))
+                                       ),
+                                       eq(g('is_endpoint'), g('reply_tag')),
+                                       eq(htd_assigned(), T),
+                                       eq(mem_assigned(), T),
+                                       eq(pms_assigned(), T),
+                                       eq(ghost_asserts_assigned(), T),
+                                       eq(g('have_reply'), T), 
+                                   ),
+                             lh('10'): conjs(
+                eq(i64v('is_endpoint'), i64(0)),
+                eq(g('badge'), T),
+                eq(g('idx'), T),
+                eq(htd_assigned(), T),
+                eq(mem_assigned(), T),
+                eq(pms_assigned(), T),
+                eq(ghost_asserts_assigned(), T)
+            )
+            },
+            precondition=T,
+            postcondition=T
+        )
+    }
 }

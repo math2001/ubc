@@ -1,14 +1,14 @@
 from __future__ import annotations
+from utils import open_temp_file
+import re
+import source
+import assume_prove
+import textwrap
+from typing_extensions import NamedTuple, NewType, assert_never
 from enum import Enum
 import subprocess
-from typing import Any, Iterator, Literal, Mapping, Sequence, TypeAlias
-from typing_extensions import NamedTuple, NewType, assert_never
+from typing import Any, Iterator, Literal, Mapping, Sequence, TypeAlias, Tuple
 
-import textwrap
-import assume_prove
-import source
-import re
-from utils import open_temp_file
 
 SMTLIB = NewType("SMTLIB", str)
 
@@ -42,6 +42,7 @@ ops_to_smt: Mapping[source.Operator, SMTLIB] = {
     source.Operator.WORD_ARRAY_ACCESS: SMTLIB("select"),
     source.Operator.WORD_ARRAY_UPDATE: SMTLIB("store"),
     source.Operator.MEM_DOM: SMTLIB("mem-dom"),
+    source.Operator.MEM_ACC: SMTLIB("mem-acc")
 }
 
 # memsort for rv64 native
@@ -119,7 +120,7 @@ EmptyLine = CmdComment('')
 Cmd = CmdDeclareFun | CmdDefineFun | CmdAssert | CmdCheckSat | CmdComment | CmdSetLogic | CmdDeclareSort
 
 
-ModelResponse: TypeAlias = CmdDefineFun
+ModelResponse = CmdDefineFun | CmdDeclareFun
 
 
 class CheckSatResponse(Enum):
@@ -236,11 +237,20 @@ def emit_expr(expr: source.ExprT[assume_prove.VarName]) -> SMTLIB:
                 return statically_infered_must_be_true
             raise NotImplementedError(
                 "PAlignValid for non symbols isn't supported")
+        if expr.operator is source.Operator.MEM_ACC:
+            assert len(expr.operands) == 2
+            mem, symb_or_addr = expr.operands
+            if not isinstance(symb_or_addr, source.ExprSymbol):
+                raise NotImplementedError(
+                    "MemAcc for non symbols isn't supported")
+
+            as_fn_call = f"{symb_or_addr.name}"
+            return SMTLIB(f"({ops_to_smt[expr.operator]} {emit_expr(mem)} {as_fn_call})")
 
         return SMTLIB(f'({ops_to_smt[expr.operator]} {" ".join(emit_expr(op) for op in expr.operands)})')
     elif isinstance(expr, source.ExprVar):
         return SMTLIB(f'{identifier(expr.name)}')
-    elif isinstance(expr, source.ExprSymbol | source.ExprType):
+    elif isinstance(expr, source.ExprType | source.ExprSymbol):
         assert False, "what do i do with this?"
     elif isinstance(expr, source.ExprFunction):
         return SMTLIB(f'({expr.function_name} {" ".join(emit_expr(arg) for arg in expr.arguments)})')
@@ -261,6 +271,8 @@ def emit_sort(typ: source.Type) -> SMTLIB:
         return SMTLIB(f'(_ BitVec {typ.size})')
     elif isinstance(typ, source.TypeWordArray):
         return word_array(typ)
+    elif isinstance(typ, source.TypeSort):
+        return SMTLIB(typ.name)
 
     assert False, f'unhandled sort {typ}'
 
@@ -309,11 +321,19 @@ def merge_smtlib(it: Iterator[SMTLIB]) -> SMTLIB:
 def emit_prelude() -> Sequence[Cmd]:
     pms = CmdDeclareSort(Identifier(str(PMS)), 0)
     htd = CmdDeclareSort(Identifier(str(HTD)), 0)
-    prelude = [pms, htd]
+    mem_var = source.ExprVar(
+        typ=source.type_mem, name=assume_prove.VarName("mem"))
+    addr_var = source.ExprVar(typ=source.type_word61,
+                              name=assume_prove.VarName("addr"))
+    mem_acc = CmdDefineFun(Identifier(str("mem-acc")), [mem_var, addr_var], source.type_word64, source.ExprOp(
+        typ=source.type_word64, operands=(mem_var, addr_var), operator=source.Operator.WORD_ARRAY_ACCESS))
+    sel4cp_internal_badge = CmdDeclareFun(Identifier(
+        str("sel4cp_internal_badge")), arg_sorts=[], ret_sort=source.type_word61)
+    prelude: Sequence[Cmd] = [pms, htd, mem_acc, sel4cp_internal_badge]
     return prelude
 
 
-def make_smtlib(p: assume_prove.AssumeProveProg) -> SMTLIB:
+def make_smtlib(p: assume_prove.AssumeProveProg, debug: bool) -> Tuple[Sequence[Cmd], SMTLIB]:
     emited_identifiers: set[Identifier] = set()
     emited_variables: set[assume_prove.VarName] = set()
 
@@ -339,11 +359,36 @@ def make_smtlib(p: assume_prove.AssumeProveProg) -> SMTLIB:
                     emited_identifiers.add(iden)
                     emited_variables.add(var.name)
 
+    def f(var: source.ExprVarT[assume_prove.VarName]) -> source.ExprT[assume_prove.VarName]:
+        if var.name == 'node_Err_ok':
+            global err_num
+            ret = source.ExprVar(
+                var.typ, assume_prove.VarName(f'node_Err_ok_{err_num}'))
+            err_num = err_num + 1
+            return ret
+        return var
+    if debug:
+        global err_num
+        err_num = 0
+
+        for node_ok_name, script in p.nodes_script.items():
+            expr = assume_prove.apply_weakest_precondition(script)
+            expr = source.convert_expr_vars(f, expr)
+
+        for i in range(0, err_num):
+            var_name = assume_prove.VarName(f'node_Err_ok_{i}')
+            iden = identifier(var_name)
+            cmds.append(CmdDefineFun(
+                iden, (), source.type_bool, source.expr_true))
+
     cmds.append(EmptyLine)
 
+    err_num = 0
     # emit all assertions from nodes (node_x_ok = wp(x))
     for node_ok_name, script in p.nodes_script.items():
         expr = assume_prove.apply_weakest_precondition(script)
+        if debug:
+            expr = source.convert_expr_vars(f, expr)
         cmds.append(cmd_assert_eq(node_ok_name, expr))
 
     cmds.append(CmdCheckSat())
@@ -351,13 +396,33 @@ def make_smtlib(p: assume_prove.AssumeProveProg) -> SMTLIB:
         source.ExprVar(source.type_bool, p.entry))))
 
     cmds.append(CmdCheckSat())
-    return merge_smtlib(emit_cmd(cmd) for cmd in cmds)
+    return (cmds, merge_smtlib(emit_cmd(cmd) for cmd in cmds))
 
 
 class CheckSatResult(Enum):
     # TODO: unknown
     UNSAT = 'unsat'
     SAT = 'sat'
+
+
+def z3_interactive(cmds: Sequence[Cmd]) -> None:
+    p = subprocess.Popen(
+        ['z3', '-in'], stdout=subprocess.PIPE, stdin=subprocess.PIPE)
+
+    assert p.stdin is not None
+    assert p.stdout is not None
+    for cmd in cmds:
+        p.stdin.write(emit_cmd(cmd).encode())
+        if isinstance(cmd, CmdAssert):
+            p.stdin.write("(check-sat)\n".encode())
+            p.stdin.flush()
+            res = CheckSatResult(p.stdout.readline().decode('utf-8').strip())
+            if res == CheckSatResult.SAT:
+                print(f"FAILED TO ASSERT: {emit_cmd(cmd)}")
+                p.terminate()
+                exit(1)
+
+    p.terminate()
 
 
 def send_smtlib_to_z3(smtlib: SMTLIB) -> Iterator[CheckSatResult]:

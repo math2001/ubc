@@ -214,7 +214,7 @@ def condition_to_take_path(func: dsa.Function, path: source.Path) -> source.Expr
     return cond
 
 
-def make_prog(func: dsa.Function) -> AssumeProveProg:
+def make_prog(func: dsa.Function, terminates: bool) -> AssumeProveProg:
     # don't need to keep DSA artifcats because we don't have pre conditions,
     # post conditions or loop invariants
 
@@ -224,7 +224,7 @@ def make_prog(func: dsa.Function) -> AssumeProveProg:
     nodes_script: dict[NodeOkName, Script] = {
         node_ok_name(source.NodeNameErr): [InstructionProve(source.ExprOp(source.type_bool, source.Operator.FALSE, ()))],
         # we don't have a post condition yet
-        node_ok_name(source.NodeNameRet): [InstructionProve(source.ExprOp(source.type_bool, source.Operator.TRUE, ()))],
+        node_ok_name(source.NodeNameRet): [InstructionProve(source.ExprOp(source.type_bool, source.Operator.TRUE if terminates else source.Operator.FALSE, ()))],
     }
 
     # traverse topologically to make the pretty printer nicer to read

@@ -134,6 +134,9 @@ def unify_variables_to_make_ghost(func: source.Function) -> source.Ghost[source.
 
     def converter(human: source.ExprVarT[source.HumanVarName]) -> source.ExprVarT[source.ProgVarName | GuardVarName]:
         if human not in conversion_map:
+            print(human)
+            for key, value in conversion_map.items():
+                print(f"{key}\t{value}")
             raise UnificationError(f"no variable matched with {human}")
 
         if len(conversion_map[human]) > 1:

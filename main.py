@@ -83,6 +83,17 @@ class CmdlineOption(Enum):
     SHOW_LINE_NUMBERS = '--ln'
     """ Shows line numbers for the smt """
 
+    PROVE_NON_TERMINATE = '--prove-non-termination'
+    """ States that the function does not terminate, therefore correctness here means to prove that the 
+    error node is never reached """
+
+    DEBUG = '--debug-smt'
+    """ Creates n many error nodes and relies on you to fix the emitted SMT. 
+    Fixing is simple, remove node_Err_ok and the assertion of node_Err_ok. 
+    From here, enable various error nodes by setting the node_Err_ok_{num} to false. 
+    This allows finding what assertion failed. 
+    """
+
 
 def find_functions_by_name(function_names: Collection[str], target: str) -> str:
     if target in function_names:
@@ -137,6 +148,8 @@ def run(filename: str, function_names: Collection[str], options: Collection[Cmdl
             print(f'  {func.name} ({len(func.nodes)} nodes)')
 
     _, functions, _ = stuff
+    
+    debug_mode = CmdlineOption.DEBUG in options 
 
     for name in function_names:
         unsafe_func = functions[find_functions_by_name(functions.keys(), name)]
@@ -163,11 +176,12 @@ def run(filename: str, function_names: Collection[str], options: Collection[Cmdl
 
         validate_dsa.validate(ghost_func, dsa_func)
 
-        prog = assume_prove.make_prog(dsa_func)
+        prog = assume_prove.make_prog(
+            dsa_func, CmdlineOption.PROVE_NON_TERMINATE not in options)
         if CmdlineOption.SHOW_AP in options:
             assume_prove.pretty_print_prog(prog)
 
-        smtlib = smt.make_smtlib(prog)
+        _, smtlib = smt.make_smtlib(prog, debug_mode)
         if CmdlineOption.SHOW_SMT in options:
             if CmdlineOption.SHOW_LINE_NUMBERS in options:
                 lines = smtlib.splitlines()
@@ -183,6 +197,10 @@ def run(filename: str, function_names: Collection[str], options: Collection[Cmdl
 
         assert len(sats) == 2
         result = smt.parse_sats(sats)
+
+        if debug_mode:
+            # we don't know if it will verify or not so we shoulnd't emit anything that might give a programmer false confidence
+            exit(0)
         if result is smt.VerificationResult.OK:
             print("verification succeeded", file=sys.stderr)
             exit(0)

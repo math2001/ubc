@@ -154,12 +154,11 @@ universe = {
         "libsel4cp.handler_loop": source.Ghost(
             loop_invariants={lh('3'):
                              conjs(
-                                       eq(neq(charv('have_reply'), char(0)), neq(g('reply_tag'), source.expr_false)),
+                                       source.expr_implies(neq(charv('have_reply'), char(0)), eq(g('reply_tag'), source.expr_true)),
                                        source.expr_implies(
                                             eq(g('is_endpoint'), T),
                                             eq(neq(i64v('is_endpoint'), i64(0)), neq(charv('have_reply'), char(0)))
                                        ),
-                                       eq(g('is_endpoint'), g('reply_tag')),
                                        eq(htd_assigned(), T),
                                        eq(mem_assigned(), T),
                                        eq(pms_assigned(), T),

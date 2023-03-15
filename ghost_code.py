@@ -312,6 +312,25 @@ def sprinkle_call_conditions(filename: str, fn: nip.Function, ctx: Dict[str, sou
 # descriptive one I could think of
 
 
+# not to be used in the ghost_code stage but before nip. 
+def sprinkle_variables(fn: nip.Function) -> Function:
+    entry = fn.cfg.entry
+    succs = fn.cfg.all_succs[entry]
+    insertions: list[Insertion] = []
+    for succ in succs:
+        pass
+    new_nodes = apply_insertions(fn, insertions)
+    all_succs = abc_cfg.compute_all_successors_from_nodes(new_nodes)
+    cfg = abc_cfg.compute_cfg_from_all_succs(all_succs, fn.cfg.entry)
+    loops = abc_cfg.compute_loops(new_nodes, cfg) 
+
+    # we should never hit this for just sprinkling in some variables
+    assert loops.keys() == fn.loops.keys(
+            ), "loop header changed during conversion: this should never happen"
+
+    return Function(name=fn.name, nodes=new_nodes, cfg=cfg, loops=loops, ghost=fn.ghost, signature=fn.signature)
+
+
 def sprinkle_ghost_code(filename: str, func: nip.Function, ctx: Dict[str, syntax.Function]) -> Function:
     new_ctx: dict[str, source.FunctionSignature[source.ProgVarName]] = {}
     for fname, syn_func in ctx.items():

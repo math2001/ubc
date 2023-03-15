@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum, unique
+from types import NoneType
 from typing import Any, Callable, Generic, Iterator, Literal, Mapping, NamedTuple, NewType, Sequence, Set, TypeAlias, TypeVar, Tuple
 from typing_extensions import assert_never
-
+import source
 import syntax
 
 
@@ -898,6 +899,7 @@ class Ghost(Generic[VarNameKind]):
     precondition: ExprT[VarNameKind]
     postcondition: ExprT[VarNameKind]
     loop_invariants: Mapping[LoopHeaderName, ExprT[VarNameKind]]
+    variables: list[Tuple[str, source.Type]] = []
 
 
 @dataclass(frozen=True)

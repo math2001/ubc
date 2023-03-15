@@ -1,0 +1,5 @@
+(set-option :produce-unsat-cores true)
+(define-fun g () Int 4)
+(assert (! (= g 3) :named node_x_23 ))
+(check-sat)
+(get-unsat-core)

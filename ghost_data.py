@@ -183,6 +183,8 @@ universe = {
             },
             precondition=T,
             postcondition=T,
+            variables=[source.ExprVar(typ=SMTTyMaybe(SMTTyTuple(
+                SMTTyCh(), SMTTyMsgInfo())), name=SMTVarName("lc_unhandled_ppcall"))]
         ),
         "libsel4cp.protected": source.Ghost(
             loop_invariants={},
@@ -190,17 +192,19 @@ universe = {
                 eq(source.lower_expr(source.ExprFunction(typ=SMTTyBitVec(1), function_name=source.FunctionName("Maybe_Prod_Ch_MsgInfo_constructor"), arguments=[source.ExprVar(typ=SMTTyMaybe(SMTTyTuple(SMTTyCh(), SMTTyMsgInfo())), name=SMTVarName("lc_unhandled_ppcall"))
                                                                                                                                                                 ])), source.lower_expr(source.ExprFunction(typ=SMTTyBitVec(1), function_name=source.FunctionName("construct-prod-just"), arguments=[
                                                                                                                                                                     source.promote_expr(
-                                                                                                                                                                        charv('ch')),
+                                                                                                                                                                        i64v('ch')),
                                                                                                                                                                     source.promote_expr(
                                                                                                                                                                         i64v('msginfo')),
                                                                                                                                                                 ]))),
             ),
-            postcondition=T, 
-            variables=[source.ExprVar(typ=SMTTyMaybe(SMTTyTuple(SMTTyCh(), SMTTyMsgInfo())), name=SMTVarName("lc_unhandled_ppcall"))]
+            postcondition=T,
+            variables=[source.ExprVar(typ=SMTTyMaybe(SMTTyTuple(
+                SMTTyCh(), SMTTyMsgInfo())), name=SMTVarName("lc_unhandled_ppcall"))]
         ),
     },
 }
 
 
-x = source.lower_expr(source.ExprVar(typ=SMTTyMaybe(SMTTyTuple(SMTTyCh(), SMTTyMsgInfo())), name=SMTVarName("lc_unhandled_ppcall")))
+x = source.lower_expr(source.ExprVar(typ=SMTTyMaybe(SMTTyTuple(
+    SMTTyCh(), SMTTyMsgInfo())), name=SMTVarName("lc_unhandled_ppcall")))
 print(x)

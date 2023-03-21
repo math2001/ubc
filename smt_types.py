@@ -25,6 +25,7 @@ class SMTTyMsgInfo():
 @dataclass(frozen=True, order=True)
 class SMTTyMaybe():
     a: SMTType
+
     @property
     def bvsize(self) -> int:
         return self.a.bvsize + 1
@@ -38,6 +39,7 @@ class SMTTyTuple():
     @property
     def bvsize(self) -> int:
         return self.fst.bvsize + self.snd.bvsize
+
 
 @dataclass(frozen=True, order=True)
 class SMTTyBitVec:

@@ -265,10 +265,18 @@ def unify_preconds(raw_precondition: source.ExprT[source.HumanVarName], args: Tu
     for garg, earg in zip(args, expected_args):
         assert garg.typ == earg.typ
         conversion_map[source.ExprVar(earg.typ, source.HumanVarName(
-            source.HumanVarNameSubject(earg.name), path=(), use_guard=False))] = garg
+            source.HumanVarNameSubject(earg.name.split('___')[0]), path=(), use_guard=False))] = garg
 
     def f(v: source.ExprVarT[source.HumanVarName]) -> source.ExprT[source.VarNameKind]:
-        return conversion_map[v]
+        if v in conversion_map:
+            return conversion_map[v]
+        else:
+            for key, value in conversion_map.items():
+                print("***")
+                print(key)
+                print(value)
+                print('---')
+            return conversion_map[v]
     return (conversion_map, source.convert_expr_vars(f, raw_precondition))
 
 
@@ -294,6 +302,8 @@ def sprinkle_call_conditions(filename: str, fn: nip.Function, ctx: Dict[str, sou
             continue
 
         ghost = ghost_data.get(filename, node.fname)
+        self_ghost = ghost_data.get(filename, fn.name)
+        ghost_variables = Sequence() if self_ghost is None else self_ghost.variables
         # asserting True and assuming True is basically doing nothing
         raw_precondition = source.expr_true if ghost is None else ghost.precondition
         raw_postcondition = source.expr_true if ghost is None else ghost.postcondition
@@ -301,15 +311,13 @@ def sprinkle_call_conditions(filename: str, fn: nip.Function, ctx: Dict[str, sou
         assert call_target is not None
 
         conversion_map = {}
-        for ghost_var in fn.ghost.variables:
-            print("EMITTING: ", ghost_var)
+        for ghost_var in ghost_variables:
             c_ghost_var_human = source.lower_expr(ghost_var)
             assert isinstance(c_ghost_var_human, source.ExprVar)
             c_ghost_var = source.ExprVar(
                 c_ghost_var_human.typ, source.ProgVarName(c_ghost_var_human.name))
+
             conversion_map[c_ghost_var_human] = c_ghost_var
-        
-        print(conversion_map)
 
         conversion_map, precondition = unify_preconds(
             raw_precondition, node.args, call_target.arguments, conversion_map)

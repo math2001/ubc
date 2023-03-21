@@ -343,7 +343,7 @@ def make_and_open_image(filepath: str) -> None:
     # https://bugzilla.mozilla.org/show_bug.cgi?id=308338
     # gotta use chrome
     p = subprocess.Popen(
-        ["chromium", "--new-window", filepath + ".svg"],
+        ["chromium-browser", "--new-window", filepath + ".svg"],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )

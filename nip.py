@@ -273,7 +273,8 @@ def nip(func: source.Function) -> Function:
     assert loops.keys() == func.loops.keys(
     ), "more work required: loop headers changed during conversion, need to keep ghost's loop invariant in sync"
 
-    conversion_map: DefaultDict[source.ExprVarT[source.HumanVarName], list[source.ExprVarT[source.ProgVarName | GuardVarName]]] = defaultdict(list)
+    conversion_map: DefaultDict[source.ExprVarT[source.HumanVarName],
+                                list[source.ExprVarT[source.ProgVarName | GuardVarName]]] = defaultdict(list)
     for ghost_var in func.ghost.variables:
         c_ghost_var_human = source.lower_expr(ghost_var)
         assert isinstance(c_ghost_var_human, source.ExprVar)

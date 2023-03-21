@@ -30,7 +30,7 @@ def lower_expr(e: source.Expr[SMTType, SMTVarName]) -> source.Expr[source.Type, 
 
 def promote_expr(e: source.Expr[Type, HumanVarName]) -> source.Expr[SMTType, SMTVarName]:
     if isinstance(e, source.ExprVar):
-        return source.ExprVar(promote_type(e.typ), SMTVarName(str(e.name)))
+        return source.ExprVar(promote_type(e.typ), SMTVarName(str(e.name.subject)))
     else:
         assert False, f"didn't expect to see {e}"
 

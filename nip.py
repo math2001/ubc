@@ -16,7 +16,7 @@ from dataclasses import dataclass
 import dataclasses
 from functools import reduce
 import abc_cfg
-from typing import Any, Callable, Iterator, Mapping, NewType, Sequence, Set, TypeAlias, overload
+from typing import Any, Callable, DefaultDict, Iterator, Mapping, NewType, Sequence, Set, TypeAlias, overload
 from typing_extensions import assert_never
 import source
 
@@ -117,9 +117,7 @@ class UnificationError(Exception):
     pass
 
 
-def unify_variables_to_make_ghost(func: source.Function) -> source.Ghost[source.ProgVarName | GuardVarName]:
-    conversion_map: defaultdict[source.ExprVarT[source.HumanVarName],
-                                list[source.ExprVarT[source.ProgVarName | GuardVarName]]] = defaultdict(lambda: [])
+def unify_variables_to_make_ghost(func: source.Function, conversion_map: DefaultDict[source.ExprVarT[source.HumanVarName], list[source.ExprVarT[source.ProgVarName | GuardVarName]]]) -> source.Ghost[source.ProgVarName | GuardVarName]:
 
     # FIXME: make this more efficient if needed
     all_vars = func.all_variables()
@@ -275,5 +273,13 @@ def nip(func: source.Function) -> Function:
     assert loops.keys() == func.loops.keys(
     ), "more work required: loop headers changed during conversion, need to keep ghost's loop invariant in sync"
 
+    conversion_map: DefaultDict[source.ExprVarT[source.HumanVarName], list[source.ExprVarT[source.ProgVarName | GuardVarName]]] = defaultdict(list)
+    for ghost_var in func.ghost.variables:
+        c_ghost_var_human = source.lower_expr(ghost_var)
+        assert isinstance(c_ghost_var_human, source.ExprVar)
+        c_ghost_var = source.ExprVar(
+            c_ghost_var_human.typ, source.ProgVarName(c_ghost_var_human.name))
+        conversion_map[c_ghost_var_human].append(c_ghost_var)
+
     return Function(cfg=cfg, nodes=new_nodes, loops=loops, signature=func.signature,
-                    name=func.name, ghost=unify_variables_to_make_ghost(func))
+                    name=func.name, ghost=unify_variables_to_make_ghost(func, conversion_map))

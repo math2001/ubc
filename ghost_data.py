@@ -1,6 +1,7 @@
 from functools import reduce
+from typing import Dict, Callable
+from smt_types import *
 import source
-
 conj = source.expr_and
 disj = source.expr_or
 imp = source.expr_implies
@@ -13,7 +14,10 @@ sub = source.expr_sub
 slt = source.expr_slt
 sle = source.expr_sle
 eq = source.expr_eq
-def neq(a, b): return source.expr_negate(source.expr_eq(a, b))
+
+
+def neq(a: source.ExprT[source.VarNameKind], b: source.ExprT[source.VarNameKind]
+        ) -> source.ExprT[source.VarNameKind]: return source.expr_negate(source.expr_eq(a, b))
 
 
 T = source.expr_true
@@ -154,18 +158,20 @@ universe = {
         "libsel4cp.handler_loop": source.Ghost(
             loop_invariants={lh('3'):
                              conjs(
-                                       source.expr_implies(neq(charv('have_reply'), char(0)), eq(g('reply_tag'), source.expr_true)),
-                                       source.expr_implies(
-                                            eq(g('is_endpoint'), T),
-                                            eq(neq(i64v('is_endpoint'), i64(0)), neq(charv('have_reply'), char(0)))
-                                       ),
-                                       eq(htd_assigned(), T),
-                                       eq(mem_assigned(), T),
-                                       eq(pms_assigned(), T),
-                                       eq(ghost_asserts_assigned(), T),
-                                       eq(g('have_reply'), T), 
-                                   ),
-                             lh('10'): conjs(
+                source.expr_implies(neq(charv('have_reply'), char(0)), eq(
+                    g('reply_tag'), source.expr_true)),
+                source.expr_implies(
+                    eq(g('is_endpoint'), T),
+                    eq(neq(i64v('is_endpoint'), i64(0)),
+                       neq(charv('have_reply'), char(0)))
+                ),
+                eq(htd_assigned(), T),
+                eq(mem_assigned(), T),
+                eq(pms_assigned(), T),
+                eq(ghost_asserts_assigned(), T),
+                eq(g('have_reply'), T),
+            ),
+                lh('10'): conjs(
                 eq(i64v('is_endpoint'), i64(0)),
                 eq(g('badge'), T),
                 eq(g('idx'), T),
@@ -176,7 +182,25 @@ universe = {
             )
             },
             precondition=T,
+            postcondition=T,
+        ),
+        "libsel4cp.protected": source.Ghost(
+            loop_invariants={},
+            precondition=conjs(
+                eq(source.lower_expr(source.ExprFunction(typ=SMTTyBitVec(1), function_name=source.FunctionName("Maybe_Prod_Ch_MsgInfo_constructor"), arguments=[source.ExprVar(typ=SMTTyMaybe(SMTTyTuple(SMTTyCh(), SMTTyMsgInfo())), name=SMTVarName("lc_unhandled_ppcall"))
+                                                                                                                                                                ])), source.lower_expr(source.ExprFunction(typ=SMTTyBitVec(1), function_name=source.FunctionName("construct-prod-just"), arguments=[
+                                                                                                                                                                    source.promote_expr(
+                                                                                                                                                                        charv('ch')),
+                                                                                                                                                                    source.promote_expr(
+                                                                                                                                                                        i64v('msginfo')),
+                                                                                                                                                                ]))),
+            ),
             postcondition=T, 
-        )
-    }
+            variables=[source.ExprVar(typ=SMTTyMaybe(SMTTyTuple(SMTTyCh(), SMTTyMsgInfo())), name=SMTVarName("lc_unhandled_ppcall"))]
+        ),
+    },
 }
+
+
+x = source.lower_expr(source.ExprVar(typ=SMTTyMaybe(SMTTyTuple(SMTTyCh(), SMTTyMsgInfo())), name=SMTVarName("lc_unhandled_ppcall")))
+print(x)

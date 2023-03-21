@@ -258,9 +258,7 @@ def sprinkle_call_assume_postcondition(name: source.NodeName, node: source.NodeC
     return Insertion(node_name=source.NodeName(f"assume_postcond_{name}_{node.succ}"), after=name, before=node.succ, kind=K.NODE_ASSUME_POST_CONDITION_FNCALL, expr=postcond)
 
 
-def unify_preconds(raw_precondition: source.ExprT[source.HumanVarName], args: Tuple[source.ExprT[source.VarNameKind], ...], expected_args: Tuple[source.ExprVarT[source.ProgVarName], ...]) -> Tuple[Dict[source.ExprVarT[source.HumanVarName], source.ExprT[source.VarNameKind]], source.ExprT[source.VarNameKind]]:
-    conversion_map: Dict[source.ExprVarT[source.HumanVarName],
-                         source.ExprT[source.VarNameKind]] = {}
+def unify_preconds(raw_precondition: source.ExprT[source.HumanVarName], args: Tuple[source.ExprT[source.VarNameKind], ...], expected_args: Tuple[source.ExprVarT[source.ProgVarName], ...], conversion_map: Dict[source.ExprVarT[source.HumanVarName], source.ExprT[source.VarNameKind]]) -> Tuple[Dict[source.ExprVarT[source.HumanVarName], source.ExprT[source.VarNameKind]], source.ExprT[source.VarNameKind]]:
 
     assert len(expected_args) == len(args)
 
@@ -301,34 +299,24 @@ def sprinkle_call_conditions(filename: str, fn: nip.Function, ctx: Dict[str, sou
         raw_postcondition = source.expr_true if ghost is None else ghost.postcondition
         call_target = ctx[node.fname]
         assert call_target is not None
+
+        conversion_map = {}
+        for ghost_var in fn.ghost.variables:
+            print("EMITTING: ", ghost_var)
+            c_ghost_var_human = source.lower_expr(ghost_var)
+            assert isinstance(c_ghost_var_human, source.ExprVar)
+            c_ghost_var = source.ExprVar(
+                c_ghost_var_human.typ, source.ProgVarName(c_ghost_var_human.name))
+            conversion_map[c_ghost_var_human] = c_ghost_var
+        
+        print(conversion_map)
+
         conversion_map, precondition = unify_preconds(
-            raw_precondition, node.args, call_target.arguments)
+            raw_precondition, node.args, call_target.arguments, conversion_map)
         postcondition = unify_postconds(
             raw_postcondition, node.rets, call_target.returns, conversion_map)
         yield from sprinkle_call_assert_preconditions(fn, name, precondition)
         yield sprinkle_call_assume_postcondition(name, node, postcondition)
-
-# sprinkle isn't the most trustworthy sounding word, but it's the most
-# descriptive one I could think of
-
-
-# not to be used in the ghost_code stage but before nip. 
-def sprinkle_variables(fn: nip.Function) -> Function:
-    entry = fn.cfg.entry
-    succs = fn.cfg.all_succs[entry]
-    insertions: list[Insertion] = []
-    for succ in succs:
-        pass
-    new_nodes = apply_insertions(fn, insertions)
-    all_succs = abc_cfg.compute_all_successors_from_nodes(new_nodes)
-    cfg = abc_cfg.compute_cfg_from_all_succs(all_succs, fn.cfg.entry)
-    loops = abc_cfg.compute_loops(new_nodes, cfg) 
-
-    # we should never hit this for just sprinkling in some variables
-    assert loops.keys() == fn.loops.keys(
-            ), "loop header changed during conversion: this should never happen"
-
-    return Function(name=fn.name, nodes=new_nodes, cfg=cfg, loops=loops, ghost=fn.ghost, signature=fn.signature)
 
 
 def sprinkle_ghost_code(filename: str, func: nip.Function, ctx: Dict[str, syntax.Function]) -> Function:

@@ -148,8 +148,8 @@ def run(filename: str, function_names: Collection[str], options: Collection[Cmdl
             print(f'  {func.name} ({len(func.nodes)} nodes)')
 
     _, functions, _ = stuff
-    
-    debug_mode = CmdlineOption.DEBUG in options 
+
+    debug_mode = CmdlineOption.DEBUG in options
 
     for name in function_names:
         unsafe_func = functions[find_functions_by_name(functions.keys(), name)]
@@ -160,9 +160,6 @@ def run(filename: str, function_names: Collection[str], options: Collection[Cmdl
             ghost_data.get(filename, unsafe_func.name))
         if CmdlineOption.SHOW_GRAPH in options:
             viz_function(prog_func)
-
-
-        # ghost variable insertion here
 
         nip_func = nip.nip(prog_func)
         if CmdlineOption.SHOW_NIP in options:

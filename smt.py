@@ -8,11 +8,12 @@ from typing_extensions import NamedTuple, NewType, assert_never
 from enum import Enum
 import subprocess
 from typing import Any, Iterator, Literal, Mapping, Sequence, TypeAlias, Tuple
+from smt_types import *
 
-
-SMTLIB = NewType("SMTLIB", str)
+err_num: int  # used because mypy wants this at the top level
 
 statically_infered_must_be_true = SMTLIB('true')
+
 
 ops_to_smt: Mapping[source.Operator, SMTLIB] = {
     source.Operator.PLUS: SMTLIB("bvadd"),
@@ -23,6 +24,8 @@ ops_to_smt: Mapping[source.Operator, SMTLIB] = {
     source.Operator.BW_AND: SMTLIB("bvand"),
     source.Operator.BW_OR: SMTLIB("bvor"),
     source.Operator.BW_XOR: SMTLIB("bvxor"),
+    source.Operator.EXTRACT: SMTLIB("extract"),
+    source.Operator.CONCAT: SMTLIB("concat"),
     source.Operator.AND: SMTLIB("and"),
     source.Operator.OR: SMTLIB("or"),
     source.Operator.IMPLIES: SMTLIB("=>"),
@@ -329,7 +332,11 @@ def emit_prelude() -> Sequence[Cmd]:
         typ=source.type_word64, operands=(mem_var, addr_var), operator=source.Operator.WORD_ARRAY_ACCESS))
     sel4cp_internal_badge = CmdDeclareFun(Identifier(
         str("sel4cp_internal_badge")), arg_sorts=[], ret_sort=source.type_word61)
-    prelude: Sequence[Cmd] = [pms, htd, mem_acc, sel4cp_internal_badge]
+
+    has_ppcal_var = CmdDeclareFun(Identifier(
+        str('has_ppcal')), arg_sorts=[], ret_sort=source.type_bool)
+    prelude: Sequence[Cmd] = [pms, htd, mem_acc,
+                              sel4cp_internal_badge, has_ppcal_var]
     return prelude
 
 
@@ -337,7 +344,7 @@ def make_smtlib(p: assume_prove.AssumeProveProg, debug: bool) -> Tuple[Sequence[
     emited_identifiers: set[Identifier] = set()
     emited_variables: set[assume_prove.VarName] = set()
 
-    cmds: list[Cmd] = [CmdSetLogic(Logic.QF_ABV)]
+    cmds: list[Cmd] = []
     cmds.extend(emit_prelude())
 
     # emit all auxilary variable declaration (declare-fun node_x_ok () Bool)
@@ -396,33 +403,22 @@ def make_smtlib(p: assume_prove.AssumeProveProg, debug: bool) -> Tuple[Sequence[
         source.ExprVar(source.type_bool, p.entry))))
 
     cmds.append(CmdCheckSat())
-    return (cmds, merge_smtlib(emit_cmd(cmd) for cmd in cmds))
+    prelude = SMTLIB('')
+    with open('./prelude.smt2', 'r') as file:
+        data = file.read()
+        prelude = SMTLIB(data)
+
+    smtlib = [prelude]
+    for cmd in cmds:
+        smtlib.append(emit_cmd(cmd))
+
+    return (cmds, merge_smtlib(iter(smtlib)))
 
 
 class CheckSatResult(Enum):
     # TODO: unknown
     UNSAT = 'unsat'
     SAT = 'sat'
-
-
-def z3_interactive(cmds: Sequence[Cmd]) -> None:
-    p = subprocess.Popen(
-        ['z3', '-in'], stdout=subprocess.PIPE, stdin=subprocess.PIPE)
-
-    assert p.stdin is not None
-    assert p.stdout is not None
-    for cmd in cmds:
-        p.stdin.write(emit_cmd(cmd).encode())
-        if isinstance(cmd, CmdAssert):
-            p.stdin.write("(check-sat)\n".encode())
-            p.stdin.flush()
-            res = CheckSatResult(p.stdout.readline().decode('utf-8').strip())
-            if res == CheckSatResult.SAT:
-                print(f"FAILED TO ASSERT: {emit_cmd(cmd)}")
-                p.terminate()
-                exit(1)
-
-    p.terminate()
 
 
 def send_smtlib_to_z3(smtlib: SMTLIB) -> Iterator[CheckSatResult]:

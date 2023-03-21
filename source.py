@@ -1,12 +1,38 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum, unique
-from types import NoneType
 from typing import Any, Callable, Generic, Iterator, Literal, Mapping, NamedTuple, NewType, Sequence, Set, TypeAlias, TypeVar, Tuple
 from typing_extensions import assert_never
 import source
 import syntax
+from smt_types import *
+
+
+def lower_type(ty: SMTType) -> source.Type:
+    return source.TypeBitVec(ty.bvsize)
+
+def promote_type(ty: source.Type) -> SMTType:
+    if isinstance(ty, source.TypeBitVec):
+        return SMTTyBitVec(ty.size)
+    assert False, f"didn't expect to see {ty}"
+
+
+def lower_expr(e: source.Expr[SMTType, SMTVarName]) -> source.Expr[source.Type, source.HumanVarName]:
+    if isinstance(e, source.ExprVar):
+        return source.ExprVar(lower_type(e.typ), source.HumanVarName(source.HumanVarNameSubject(str(e.name)), path=(), use_guard=False))
+    elif isinstance(e, source.ExprNum):
+        return source.ExprNum(lower_type(e.typ), e.num)
+    elif isinstance(e, source.ExprFunction):
+        return source.ExprFunction(lower_type(e.typ), function_name=e.function_name, arguments=[lower_expr(arg) for arg in e.arguments])
+    else:
+        assert False, f"didn't expect to see anything else being lowered {e}"
+
+def promote_expr(e: source.Expr[Type, HumanVarName]) -> source.Expr[SMTType, SMTVarName]:
+    if isinstance(e, source.ExprVar):
+        return source.ExprVar(promote_type(e.typ), SMTVarName(str(e.name)))
+    else:
+        assert False, f"didn't expect to see {e}"
 
 
 class ProgVarName(str):
@@ -130,6 +156,8 @@ class TypeSort(NamedTuple):
 
 
 Type = TypeStruct | TypeBitVec | TypePtr | TypeArray | TypeFloatingPoint | TypeBuiltin | TypeWordArray | TypeSort
+
+x: Type = TypeBitVec(23)
 
 
 def pretty_type_ascii(typ: Type) -> str:
@@ -259,6 +287,8 @@ class Operator(Enum):
     BW_AND = 'BWAnd'
     BW_OR = 'BWOr'
     BW_XOR = 'BWXor'
+    CONCAT = "concat"
+    EXTRACT = "extract"
 
     SHIFT_LEFT = 'ShiftLeft'
     SHIFT_RIGHT = 'ShiftRight'
@@ -898,8 +928,11 @@ class GhostlessFunction(Generic[VarNameKind, VarNameKind2]):
 class Ghost(Generic[VarNameKind]):
     precondition: ExprT[VarNameKind]
     postcondition: ExprT[VarNameKind]
-    loop_invariants: Mapping[LoopHeaderName, ExprT[VarNameKind]]
-    variables: list[Tuple[str, source.Type]] = []
+    loop_invariants: Mapping[LoopHeaderName, Expr[Type, VarNameKind]]
+    variables: Sequence[source.ExprVar[SMTType, SMTVarName]] = field(
+        default_factory=lambda: [])
+    smt_functions: Sequence[source.ExprFunction[SMTType,
+                                                SMTVarName]] = field(default_factory=lambda: [])
 
 
 @dataclass(frozen=True)

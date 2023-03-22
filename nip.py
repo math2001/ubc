@@ -20,6 +20,7 @@ from typing import Any, Callable, DefaultDict, Iterator, Mapping, NewType, Seque
 from typing_extensions import assert_never
 import source
 import ghost_data
+import smt_types
 
 
 class GuardVarName(str):
@@ -277,10 +278,8 @@ def nip(filename: str, func: source.Function) -> Function:
     conversion_map: DefaultDict[source.ExprVarT[source.HumanVarName],
                                 list[source.ExprVarT[source.ProgVarName | GuardVarName]]] = defaultdict(list)
     self_ghost = ghost_data.get(filename, func.name)
-    if self_ghost is None:
-        self_ghost = ghost_data.default_ghost()
-    assert self_ghost is not None
-    for ghost_var in self_ghost.variables:
+    variables: Sequence[source.ExprVar[smt_types.SMTType, smt_types.SMTVarName]] = [] if self_ghost is None else self_ghost.variables
+    for ghost_var in variables:
         c_ghost_var_human = source.lower_expr(ghost_var)
         assert isinstance(c_ghost_var_human, source.ExprVar)
         c_ghost_var = source.ExprVar(

@@ -926,10 +926,10 @@ class GhostlessFunction(Generic[VarNameKind, VarNameKind2]):
     def with_ghost(self, ghost: Ghost[HumanVarName] | None) -> GenericFunction[VarNameKind, HumanVarName]:
         if ghost is None:
             ghost = Ghost(precondition=expr_true,
-                              postcondition=expr_true,
-                              loop_invariants={
-                                  lh: expr_true for lh in self.loops.keys()},
-                              )
+                          postcondition=expr_true,
+                          loop_invariants={
+                              lh: expr_true for lh in self.loops.keys()},
+                          )
         assert self.loops.keys() == ghost.loop_invariants.keys(), "loop invariants don't match"
         return GenericFunction(name=self.name, nodes=self.nodes, loops=self.loops, signature=self.signature, cfg=self.cfg, ghost=ghost)
 
@@ -943,8 +943,6 @@ class Ghost(Generic[VarNameKind]):
         default_factory=lambda: [])
     smt_functions: Sequence[source.ExprFunction[SMTType,
                                                 SMTVarName]] = field(default_factory=lambda: [])
-
-
 
 
 @dataclass(frozen=True)

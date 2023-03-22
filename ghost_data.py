@@ -24,14 +24,13 @@ T = source.expr_true
 F = source.expr_false
 
 
-def default_ghost() -> source.Ghost[source.HumanVarName]: 
-    return source.Ghost(loop_invariants={}, precondition=T, postcondition=T)
 
 def get(file_name: str, func_name: str) -> source.Ghost[source.HumanVarName] | None:
-    if file_name not in universe and func_name not in universe[file_name]:
+    if file_name not in universe:
+        return None
+    if func_name not in universe[file_name]:
         return None
     return universe[file_name][func_name]
-
 
 
 def conjs(*xs: source.ExprT[source.VarNameKind]) -> source.ExprT[source.VarNameKind]:

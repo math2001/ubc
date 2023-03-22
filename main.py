@@ -181,7 +181,8 @@ def run(filename: str, function_names: Collection[str], options: Collection[Cmdl
         if CmdlineOption.SHOW_AP in options:
             assume_prove.pretty_print_prog(prog)
 
-        _, smtlib = smt.make_smtlib(prog, debug_mode, filename, unsafe_func.name)
+        _, smtlib = smt.make_smtlib(
+            prog, debug_mode, filename, unsafe_func.name)
         if CmdlineOption.SHOW_SMT in options:
             if CmdlineOption.SHOW_LINE_NUMBERS in options:
                 lines = smtlib.splitlines()

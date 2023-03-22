@@ -32,7 +32,7 @@ def verify(filename: str, unsafe_func: syntax.Function, ctx: Dict[str, syntax.Fu
     ghost_func = ghost_code.sprinkle_ghost_code(filename, nip_func, ctx)
     dsa_func = dsa.dsa(ghost_func)
 
-    prog = assume_prove.make_prog(dsa_func, True) # test files all terminate
+    prog = assume_prove.make_prog(dsa_func, True)  # test files all terminate
     _, smtlib = smt.make_smtlib(prog, False, filename, unsafe_func.name)
     sats = tuple(smt.send_smtlib_to_z3(smtlib))
     return smt.parse_sats(sats)

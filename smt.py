@@ -123,7 +123,7 @@ EmptyLine = CmdComment('')
 Cmd = CmdDeclareFun | CmdDefineFun | CmdAssert | CmdCheckSat | CmdComment | CmdSetLogic | CmdDeclareSort
 
 
-ModelResponse = CmdDefineFun | CmdDeclareFun
+ModelResponse = CmdDefineFun
 
 
 class CheckSatResponse(Enum):
@@ -341,8 +341,8 @@ def emit_prelude() -> Sequence[Cmd]:
 
 
 def make_smtlib(p: assume_prove.AssumeProveProg, debug: bool, filename: str, fn_name: str) -> Tuple[Sequence[Cmd], SMTLIB]:
-    file_ghost = ghost_data.get(filename, fn_name)
-    assert file_ghost is not None
+    self_ghost = ghost_data.get(filename, fn_name)
+    variables: Sequence[source.ExprVar[SMTType, SMTVarName]] = [] if self_ghost is None else self_ghost.variables
 
     emited_identifiers: set[Identifier] = set()
     emited_variables: set[assume_prove.VarName] = set()
@@ -359,8 +359,9 @@ def make_smtlib(p: assume_prove.AssumeProveProg, debug: bool, filename: str, fn_
 
     cmds.append(EmptyLine)
 
-    for ghost_var in file_ghost.variables:
-        first_incarnation_name = identifier(assume_prove.VarName(ghost_var.name + "~" + "1"))
+    for ghost_var in variables:
+        first_incarnation_name = identifier(
+            assume_prove.VarName(ghost_var.name + "~" + "1"))
         emited_identifiers.add(first_incarnation_name)
     # emit all variable declaration (declare-fun y () <sort>)
     for script in p.nodes_script.values():

@@ -187,7 +187,7 @@ def do_nip_test(filename: str, func: syntax.Function) -> None:
 
 @pytest.mark.parametrize('func', (f for f in example_test_CFunctions[1].values() if f.entry is not None))
 def test_nip_test_functions(func: syntax.Function) -> None:
-    do_nip_test("tests/all.txt",func)
+    do_nip_test("tests/all.txt", func)
 
 
 @pytest.mark.slow

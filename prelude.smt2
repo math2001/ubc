@@ -135,3 +135,4 @@
 (define-fun Ch_set_add ((s Ch_set) (x Ch)) Ch_set (Ch_set_union s (Ch_set_singleton x)))
 (define-fun Ch_set_remove ((s Ch_set) (x Ch)) Ch_set (Ch_set_intersection s (Ch_set_singleton x)))
 
+(define-fun lc_unhandled_ppcall~1 () Maybe_Prod_Ch_MsgInfo Maybe_Prod_Ch_MsgInfo_Nothing)

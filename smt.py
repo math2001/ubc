@@ -9,7 +9,7 @@ from enum import Enum
 import subprocess
 from typing import Any, Iterator, Literal, Mapping, Sequence, TypeAlias, Tuple
 from smt_types import *
-
+import ghost_data
 err_num: int  # used because mypy wants this at the top level
 
 statically_infered_must_be_true = SMTLIB('true')
@@ -340,7 +340,10 @@ def emit_prelude() -> Sequence[Cmd]:
     return prelude
 
 
-def make_smtlib(p: assume_prove.AssumeProveProg, debug: bool) -> Tuple[Sequence[Cmd], SMTLIB]:
+def make_smtlib(p: assume_prove.AssumeProveProg, debug: bool, filename: str) -> Tuple[Sequence[Cmd], SMTLIB]:
+    file_ghost = ghost_data.get_file_ghost(filename)
+    assert file_ghost is not None
+
     emited_identifiers: set[Identifier] = set()
     emited_variables: set[assume_prove.VarName] = set()
 
@@ -356,6 +359,9 @@ def make_smtlib(p: assume_prove.AssumeProveProg, debug: bool) -> Tuple[Sequence[
 
     cmds.append(EmptyLine)
 
+    for ghost_var in file_ghost.variables:
+        first_incarnation_name = identifier(assume_prove.VarName(ghost_var.name + "~" + "1"))
+        emited_identifiers.add(first_incarnation_name)
     # emit all variable declaration (declare-fun y () <sort>)
     for script in p.nodes_script.values():
         for ins in script:

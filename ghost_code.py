@@ -302,8 +302,8 @@ def sprinkle_call_conditions(filename: str, fn: nip.Function, ctx: Dict[str, sou
         if not isinstance(node,  source.NodeCall):
             continue
 
-        ghost = ghost_data.get_func_ghost(filename, node.fname)
-        self_ghost = ghost_data.get_file_ghost(filename)
+        ghost = ghost_data.get(filename, node.fname)
+        self_ghost = ghost_data.get(filename, fn.name)
         ghost_variables: Sequence[source.ExprVar[smt_types.SMTType, smt_types.SMTVarName]] = [
         ] if self_ghost is None else self_ghost.variables
         # asserting True and assuming True is basically doing nothing

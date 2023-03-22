@@ -28,12 +28,12 @@ del f
 def verify(filename: str, unsafe_func: syntax.Function, ctx: Dict[str, syntax.Function]) -> smt.VerificationResult:
     prog_func = source.convert_function(unsafe_func).with_ghost(
         ghost_data.get(filename, unsafe_func.name))
-    nip_func = nip.nip(prog_func)
+    nip_func = nip.nip(filename, prog_func)
     ghost_func = ghost_code.sprinkle_ghost_code(filename, nip_func, ctx)
     dsa_func = dsa.dsa(ghost_func)
 
-    prog = assume_prove.make_prog(dsa_func)
-    smtlib = smt.make_smtlib(prog)
+    prog = assume_prove.make_prog(dsa_func, True) # test files all terminate
+    _, smtlib = smt.make_smtlib(prog, False, filename, unsafe_func.name)
     sats = tuple(smt.send_smtlib_to_z3(smtlib))
     return smt.parse_sats(sats)
 

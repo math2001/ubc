@@ -340,8 +340,8 @@ def emit_prelude() -> Sequence[Cmd]:
     return prelude
 
 
-def make_smtlib(p: assume_prove.AssumeProveProg, debug: bool, filename: str) -> Tuple[Sequence[Cmd], SMTLIB]:
-    file_ghost = ghost_data.get_file_ghost(filename)
+def make_smtlib(p: assume_prove.AssumeProveProg, debug: bool, filename: str, fn_name: str) -> Tuple[Sequence[Cmd], SMTLIB]:
+    file_ghost = ghost_data.get(filename, fn_name)
     assert file_ghost is not None
 
     emited_identifiers: set[Identifier] = set()

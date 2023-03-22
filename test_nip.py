@@ -177,17 +177,17 @@ def ensure_guard_and_state_update_correctness(nip_func: nip.Function) -> None:
             # the code already
 
 
-def do_nip_test(func: syntax.Function) -> None:
+def do_nip_test(filename: str, func: syntax.Function) -> None:
     print(func.name)
     prog_func = source.convert_function(func).with_ghost(None)
-    nip_func = nip.nip(prog_func)
+    nip_func = nip.nip(filename, prog_func)
     ensure_correspondence(prog_func, nip_func)
     ensure_guard_and_state_update_correctness(nip_func)
 
 
 @pytest.mark.parametrize('func', (f for f in example_test_CFunctions[1].values() if f.entry is not None))
 def test_nip_test_functions(func: syntax.Function) -> None:
-    do_nip_test(func)
+    do_nip_test("tests/all.txt",func)
 
 
 @pytest.mark.slow
@@ -196,4 +196,4 @@ def test_nip_kernel_functions(func: syntax.Function) -> None:
     if func.name in ('Kernel_C.merge_regions', 'Kernel_C.create_untypeds', 'Kernel_C.reserve_region'):
         pytest.skip("loop headers change during transformation, not supported")
 
-    do_nip_test(func)
+    do_nip_test("examples/kernel_CFunctions.txt", func)

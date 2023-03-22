@@ -25,7 +25,7 @@ del f
 @pytest.mark.parametrize('func', (f for f in example_dsa_CFunctions[1].values() if f.entry is not None))
 def test_dsa_custom_tests(func: syntax.Function) -> None:
     prog_func = source.convert_function(func).with_ghost(None)
-    nip_func = nip.nip(prog_func)
+    nip_func = nip.nip("examples/dsa.txt", prog_func)
     ghost_func = ghost_code.sprinkle_ghost_code(
         'examples/kernel_CFunctions.txt', nip_func, example_dsa_CFunctions[1])
     dsa_func = dsa.dsa(ghost_func)
@@ -51,7 +51,7 @@ def test_dsa_kernel_functions(function: syntax.Function) -> None:
             "weird if True equals False or True equals True breaks call precondition")
 
     prog_func = source.convert_function(function).with_ghost(None)
-    nip_func = nip.nip(prog_func)
+    nip_func = nip.nip("examples/kernel_CFunctions.txt", prog_func)
     ghost_func = ghost_code.sprinkle_ghost_code(
         'examples/kernel_CFunctions.c', nip_func, kernel_CFunctions[1])
     dsa_func = dsa.dsa(ghost_func)

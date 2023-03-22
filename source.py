@@ -923,9 +923,9 @@ class GhostlessFunction(Generic[VarNameKind, VarNameKind2]):
                 self, n, with_loop_targets=True))
         return all_vars
 
-    def with_ghost(self, ghost: FuncGhost[HumanVarName] | None) -> GenericFunction[VarNameKind, HumanVarName]:
+    def with_ghost(self, ghost: Ghost[HumanVarName] | None) -> GenericFunction[VarNameKind, HumanVarName]:
         if ghost is None:
-            ghost = FuncGhost(precondition=expr_true,
+            ghost = Ghost(precondition=expr_true,
                               postcondition=expr_true,
                               loop_invariants={
                                   lh: expr_true for lh in self.loops.keys()},
@@ -935,24 +935,21 @@ class GhostlessFunction(Generic[VarNameKind, VarNameKind2]):
 
 
 @dataclass(frozen=True)
-class FuncGhost(Generic[VarNameKind]):
+class Ghost(Generic[VarNameKind]):
     precondition: ExprT[VarNameKind]
     postcondition: ExprT[VarNameKind]
     loop_invariants: Mapping[LoopHeaderName, Expr[Type, VarNameKind]]
-
-
-@dataclass(frozen=True)
-class FileGhost(Generic[VarNameKind]):
-    fn_ghost: Dict[str, FuncGhost[VarNameKind]]
     variables: Sequence[source.ExprVar[SMTType, SMTVarName]] = field(
         default_factory=lambda: [])
     smt_functions: Sequence[source.ExprFunction[SMTType,
                                                 SMTVarName]] = field(default_factory=lambda: [])
 
 
+
+
 @dataclass(frozen=True)
 class GenericFunction(GhostlessFunction[VarNameKind, VarNameKind2]):
-    ghost: FuncGhost[VarNameKind2]
+    ghost: Ghost[VarNameKind2]
 
 
 Function = GenericFunction[ProgVarName, HumanVarName]

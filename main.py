@@ -85,7 +85,7 @@ class CmdlineOption(Enum):
 
     PROVE_NON_TERMINATE = '--prove-non-termination'
     """ States that the function does not terminate, therefore correctness here means to prove that the 
-    error node is never reached """
+    error node is never reached and the return node is never reached"""
 
     DEBUG = '--debug-smt'
     """ Creates n many error nodes and relies on you to fix the emitted SMT. 
@@ -157,7 +157,7 @@ def run(filename: str, function_names: Collection[str], options: Collection[Cmdl
             viz_raw_function(unsafe_func)
 
         prog_func = source.convert_function(unsafe_func).with_ghost(
-            ghost_data.get_func_ghost(filename, unsafe_func.name))
+            ghost_data.get(filename, unsafe_func.name))
         if CmdlineOption.SHOW_GRAPH in options:
             viz_function(prog_func)
 
@@ -181,7 +181,7 @@ def run(filename: str, function_names: Collection[str], options: Collection[Cmdl
         if CmdlineOption.SHOW_AP in options:
             assume_prove.pretty_print_prog(prog)
 
-        _, smtlib = smt.make_smtlib(prog, debug_mode, filename)
+        _, smtlib = smt.make_smtlib(prog, debug_mode, filename, unsafe_func.name)
         if CmdlineOption.SHOW_SMT in options:
             if CmdlineOption.SHOW_LINE_NUMBERS in options:
                 lines = smtlib.splitlines()

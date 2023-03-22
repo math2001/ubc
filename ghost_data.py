@@ -24,21 +24,14 @@ T = source.expr_true
 F = source.expr_false
 
 
-def get_func_ghost(file_name: str, func_name: str) -> source.FuncGhost[source.HumanVarName] | None:
-    file_ghost = get_file_ghost(file_name)
-    if file_ghost is None:
-        return None
-    if func_name not in file_ghost.fn_ghost:
-        return None
-    return file_ghost.fn_ghost[func_name]
+def default_ghost() -> source.Ghost[source.HumanVarName]: 
+    return source.Ghost(loop_invariants={}, precondition=T, postcondition=T)
 
-
-def get_file_ghost(filename: str) -> source.FileGhost[source.HumanVarName] | None:
-    if filename.endswith('.c'):
-        filename = filename[:-len('.c')] + '.txt'
-    if filename not in new_universe:
+def get(file_name: str, func_name: str) -> source.Ghost[source.HumanVarName] | None:
+    if file_name not in universe and func_name not in universe[file_name]:
         return None
-    return new_universe[filename]
+    return universe[file_name][func_name]
+
 
 
 def conjs(*xs: source.ExprT[source.VarNameKind]) -> source.ExprT[source.VarNameKind]:
@@ -115,11 +108,11 @@ def char(n: int) -> source.ExprNumT:
     return source.ExprNum(source.type_word8, n)
 
 
-universe = {
+universe: Dict[str, Dict[str, source.Ghost[source.HumanVarName]]] = {
     "tests/all.txt": {
         # 3 <= i ==> a = 1
         # 3:w32 <=s i:w32 ==> a:w32 = 1:w32
-        "tmp.undefined_var_with_loops": source.FuncGhost(
+        "tmp.undefined_var_with_loops": source.Ghost(
             loop_invariants={
                 lh("5"): conj(imp(sle(i32(3), i32v("i")), eq(i32v("a"), i32(1))), sbounded(i32v("i"), i32(0), i32(5)))
             },
@@ -127,7 +120,7 @@ universe = {
             postcondition=T,
         ),
 
-        "tmp.multiple_loops___fail_missing_invariant": source.FuncGhost(
+        "tmp.multiple_loops___fail_missing_invariant": source.Ghost(
             loop_invariants={
                 # no need to think, i is always going to be less than 200, and
                 # that's enough to prove no overflows
@@ -140,7 +133,7 @@ universe = {
             postcondition=T,
         ),
 
-        "tmp.arith_sum": source.FuncGhost(
+        "tmp.arith_sum": source.Ghost(
             loop_invariants={
                 # 0 <= i <= n
                 # s = i * (i - 1) / 2
@@ -157,14 +150,14 @@ universe = {
                 mul(i32v('n'), sub(i32v('i'), i32(1))), i32(2))),
         ),
 
-        "tmp.multiple_ret_incarnations___fail_missing_invariants": source.FuncGhost(
+        "tmp.multiple_ret_incarnations___fail_missing_invariants": source.Ghost(
             loop_invariants={lh('5'): T},
             precondition=sle(i32(0), i32v('n')),
             postcondition=eq(i32ret, udiv(i32v('n'), i32(2))),
         )
     },
     "./examples/libsel4cp_trunc.txt": {
-        "libsel4cp.handler_loop": source.FuncGhost(
+        "libsel4cp.handler_loop": source.Ghost(
             loop_invariants={lh('3'):
                              conjs(
                 source.expr_implies(neq(charv('have_reply'), char(0)), eq(
@@ -193,7 +186,7 @@ universe = {
             precondition=T,
             postcondition=T,
         ),
-        "libsel4cp.protected": source.FuncGhost(
+        "libsel4cp.protected": source.Ghost(
             loop_invariants={},
             precondition=conjs(
                 eq(source.lower_expr(source.ExprVar(typ=SMTTyMaybe(SMTTyTuple(SMTTyCh(), SMTTyMsgInfo())), name=SMTVarName("lc_unhandled_ppcall"))), source.lower_expr(source.ExprFunction(typ=SMTTyMaybe(SMTTyTuple(SMTTyCh(), SMTTyMsgInfo())), function_name=source.FunctionName("construct-prod-just"), arguments=[
@@ -209,53 +202,53 @@ universe = {
     },
 }
 
-new_universe: Dict[str, source.FileGhost[source.HumanVarName]] = {
-    "./examples/libsel4cp_trunc.txt": source.FileGhost(
-        {
-            "libsel4cp.protected": source.FuncGhost(loop_invariants={},
-                                                    precondition=conjs(
-                eq(source.lower_expr(source.ExprVar(typ=SMTTyMaybe(SMTTyTuple(SMTTyCh(), SMTTyMsgInfo())), name=SMTVarName("lc_unhandled_ppcall"))), source.lower_expr(source.ExprFunction(typ=SMTTyMaybe(SMTTyTuple(SMTTyCh(), SMTTyMsgInfo())), function_name=source.FunctionName("construct-prod-just"), arguments=[
-                    source.promote_expr(
-                        i64v('ch')),
-                    source.promote_expr(
-                        i64v('msginfo')),
-                ]))),
-            ),
-                postcondition=eq(source.lower_expr(source.ExprVar(typ=SMTTyMaybe(SMTTyTuple(SMTTyCh(), SMTTyMsgInfo())), name=SMTVarName(
-                    "lc_unhandled_ppcall"))), source.lower_expr(source.ExprFunction(typ=SMTTyMaybe(SMTTyTuple(SMTTyCh(), SMTTyMsgInfo())), function_name=source.FunctionName('Maybe_Prod_Ch_MsgInfo_Nothing'), arguments=[]))),
-            ),
-            "libsel4cp.handler_loop": source.FuncGhost(
-                loop_invariants={lh('3'):
-                                 conjs(
-                    source.expr_implies(neq(charv('have_reply'), char(0)), eq(
-                        g('reply_tag'), source.expr_true)),
-                    source.expr_implies(
-                        eq(g('is_endpoint'), T),
-                        eq(neq(i64v('is_endpoint'), i64(0)),
-                           neq(charv('have_reply'), char(0)))
-                    ),
-                    eq(htd_assigned(), T),
-                    eq(mem_assigned(), T),
-                    eq(pms_assigned(), T),
-                    eq(ghost_asserts_assigned(), T),
-                    eq(g('have_reply'), T),
-                ),
-                    lh('10'): conjs(
-                    eq(i64v('is_endpoint'), i64(0)),
-                    eq(g('badge'), T),
-                    eq(g('idx'), T),
-                    eq(htd_assigned(), T),
-                    eq(mem_assigned(), T),
-                    eq(pms_assigned(), T),
-                    eq(ghost_asserts_assigned(), T)
-                )
-                },
-                precondition=T,
-                postcondition=T
-            ),
+# new_universe: Dict[str, source.FileGhost[source.HumanVarName]] = {
+#     "./examples/libsel4cp_trunc.txt": source.FileGhost(
+#         {
+#             "libsel4cp.protected": source.FuncGhost(loop_invariants={},
+#                                                     precondition=conjs(
+#                 eq(source.lower_expr(source.ExprVar(typ=SMTTyMaybe(SMTTyTuple(SMTTyCh(), SMTTyMsgInfo())), name=SMTVarName("lc_unhandled_ppcall"))), source.lower_expr(source.ExprFunction(typ=SMTTyMaybe(SMTTyTuple(SMTTyCh(), SMTTyMsgInfo())), function_name=source.FunctionName("construct-prod-just"), arguments=[
+#                     source.promote_expr(
+#                         i64v('ch')),
+#                     source.promote_expr(
+#                         i64v('msginfo')),
+#                 ]))),
+#             ),
+#                 postcondition=eq(source.lower_expr(source.ExprVar(typ=SMTTyMaybe(SMTTyTuple(SMTTyCh(), SMTTyMsgInfo())), name=SMTVarName(
+#                     "lc_unhandled_ppcall"))), source.lower_expr(source.ExprFunction(typ=SMTTyMaybe(SMTTyTuple(SMTTyCh(), SMTTyMsgInfo())), function_name=source.FunctionName('Maybe_Prod_Ch_MsgInfo_Nothing'), arguments=[]))),
+#             ),
+#             "libsel4cp.handler_loop": source.FuncGhost(
+#                 loop_invariants={lh('3'):
+#                                  conjs(
+#                     source.expr_implies(neq(charv('have_reply'), char(0)), eq(
+#                         g('reply_tag'), source.expr_true)),
+#                     source.expr_implies(
+#                         eq(g('is_endpoint'), T),
+#                         eq(neq(i64v('is_endpoint'), i64(0)),
+#                            neq(charv('have_reply'), char(0)))
+#                     ),
+#                     eq(htd_assigned(), T),
+#                     eq(mem_assigned(), T),
+#                     eq(pms_assigned(), T),
+#                     eq(ghost_asserts_assigned(), T),
+#                     eq(g('have_reply'), T),
+#                 ),
+#                     lh('10'): conjs(
+#                     eq(i64v('is_endpoint'), i64(0)),
+#                     eq(g('badge'), T),
+#                     eq(g('idx'), T),
+#                     eq(htd_assigned(), T),
+#                     eq(mem_assigned(), T),
+#                     eq(pms_assigned(), T),
+#                     eq(ghost_asserts_assigned(), T)
+#                 )
+#                 },
+#                 precondition=T,
+#                 postcondition=T
+#             ),
 
-        },
-        variables=[source.ExprVar(typ=SMTTyMaybe(SMTTyTuple(
-            SMTTyCh(), SMTTyMsgInfo())), name=SMTVarName("lc_unhandled_ppcall"))],
-    ),
-}
+#         },
+#         variables=[source.ExprVar(typ=SMTTyMaybe(SMTTyTuple(
+#             SMTTyCh(), SMTTyMsgInfo())), name=SMTVarName("lc_unhandled_ppcall"))],
+#     ),
+# }

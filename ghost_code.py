@@ -23,6 +23,7 @@ import source
 import nip
 import ghost_data
 import syntax
+import smt_types
 
 
 @dataclass(frozen=True)
@@ -301,9 +302,10 @@ def sprinkle_call_conditions(filename: str, fn: nip.Function, ctx: Dict[str, sou
         if not isinstance(node,  source.NodeCall):
             continue
 
-        ghost = ghost_data.get(filename, node.fname)
-        self_ghost = ghost_data.get(filename, fn.name)
-        ghost_variables = [] if self_ghost is None else self_ghost.variables
+        ghost = ghost_data.get_func_ghost(filename, node.fname)
+        self_ghost = ghost_data.get_file_ghost(filename)
+        ghost_variables: Sequence[source.ExprVar[smt_types.SMTType, smt_types.SMTVarName]] = [
+        ] if self_ghost is None else self_ghost.variables
         # asserting True and assuming True is basically doing nothing
         raw_precondition = source.expr_true if ghost is None else ghost.precondition
         raw_postcondition = source.expr_true if ghost is None else ghost.postcondition

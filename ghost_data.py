@@ -24,12 +24,21 @@ T = source.expr_true
 F = source.expr_false
 
 
-def get(file_name: str, func_name: str) -> source.FuncGhost[source.HumanVarName] | None:
-    if file_name.endswith('.c'):
-        file_name = file_name[:-len('.c')] + '.txt'
-    if file_name in universe and func_name in universe[file_name]:
-        return universe[file_name][func_name]
-    return None
+def get_func_ghost(file_name: str, func_name: str) -> source.FuncGhost[source.HumanVarName] | None:
+    file_ghost = get_file_ghost(file_name)
+    if file_ghost is None:
+        return None
+    if func_name not in file_ghost.fn_ghost:
+        return None
+    return file_ghost.fn_ghost[func_name]
+
+
+def get_file_ghost(filename: str) -> source.FileGhost[source.HumanVarName] | None:
+    if filename.endswith('.c'):
+        filename = filename[:-len('.c')] + '.txt'
+    if filename not in new_universe:
+        return None
+    return new_universe[filename]
 
 
 def conjs(*xs: source.ExprT[source.VarNameKind]) -> source.ExprT[source.VarNameKind]:
@@ -215,9 +224,38 @@ new_universe: Dict[str, source.FileGhost[source.HumanVarName]] = {
                 postcondition=eq(source.lower_expr(source.ExprVar(typ=SMTTyMaybe(SMTTyTuple(SMTTyCh(), SMTTyMsgInfo())), name=SMTVarName(
                     "lc_unhandled_ppcall"))), source.lower_expr(source.ExprFunction(typ=SMTTyMaybe(SMTTyTuple(SMTTyCh(), SMTTyMsgInfo())), function_name=source.FunctionName('Maybe_Prod_Ch_MsgInfo_Nothing'), arguments=[]))),
             ),
+            "libsel4cp.handler_loop": source.FuncGhost(
+                loop_invariants={lh('3'):
+                                 conjs(
+                    source.expr_implies(neq(charv('have_reply'), char(0)), eq(
+                        g('reply_tag'), source.expr_true)),
+                    source.expr_implies(
+                        eq(g('is_endpoint'), T),
+                        eq(neq(i64v('is_endpoint'), i64(0)),
+                           neq(charv('have_reply'), char(0)))
+                    ),
+                    eq(htd_assigned(), T),
+                    eq(mem_assigned(), T),
+                    eq(pms_assigned(), T),
+                    eq(ghost_asserts_assigned(), T),
+                    eq(g('have_reply'), T),
+                ),
+                    lh('10'): conjs(
+                    eq(i64v('is_endpoint'), i64(0)),
+                    eq(g('badge'), T),
+                    eq(g('idx'), T),
+                    eq(htd_assigned(), T),
+                    eq(mem_assigned(), T),
+                    eq(pms_assigned(), T),
+                    eq(ghost_asserts_assigned(), T)
+                )
+                },
+                precondition=T,
+                postcondition=T
+            ),
 
         },
         variables=[source.ExprVar(typ=SMTTyMaybe(SMTTyTuple(
             SMTTyCh(), SMTTyMsgInfo())), name=SMTVarName("lc_unhandled_ppcall"))],
-    )
+    ),
 }

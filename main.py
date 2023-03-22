@@ -157,7 +157,7 @@ def run(filename: str, function_names: Collection[str], options: Collection[Cmdl
             viz_raw_function(unsafe_func)
 
         prog_func = source.convert_function(unsafe_func).with_ghost(
-            ghost_data.get(filename, unsafe_func.name))
+            ghost_data.get_func_ghost(filename, unsafe_func.name))
         if CmdlineOption.SHOW_GRAPH in options:
             viz_function(prog_func)
 

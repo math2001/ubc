@@ -276,7 +276,7 @@ def nip(filename: str, func: source.Function) -> Function:
 
     conversion_map: DefaultDict[source.ExprVarT[source.HumanVarName],
                                 list[source.ExprVarT[source.ProgVarName | GuardVarName]]] = defaultdict(list)
-    self_ghost = ghost_data.get(filename, func.name)
+    self_ghost = ghost_data.get_file_ghost(filename)
     assert self_ghost is not None
     for ghost_var in self_ghost.variables:
         c_ghost_var_human = source.lower_expr(ghost_var)

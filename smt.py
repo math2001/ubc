@@ -256,6 +256,8 @@ def emit_expr(expr: source.ExprT[assume_prove.VarName]) -> SMTLIB:
     elif isinstance(expr, source.ExprType | source.ExprSymbol):
         assert False, "what do i do with this?"
     elif isinstance(expr, source.ExprFunction):
+        if len(expr.arguments) == 0:
+            return SMTLIB(f"{expr.function_name}")
         return SMTLIB(f'({expr.function_name} {" ".join(emit_expr(arg) for arg in expr.arguments)})')
     assert_never(expr)
 
@@ -333,10 +335,8 @@ def emit_prelude() -> Sequence[Cmd]:
     sel4cp_internal_badge = CmdDeclareFun(Identifier(
         str("sel4cp_internal_badge")), arg_sorts=[], ret_sort=source.type_word61)
 
-    has_ppcal_var = CmdDeclareFun(Identifier(
-        str('has_ppcal')), arg_sorts=[], ret_sort=source.type_bool)
     prelude: Sequence[Cmd] = [pms, htd, mem_acc,
-                              sel4cp_internal_badge, has_ppcal_var]
+                              sel4cp_internal_badge]
     return prelude
 
 

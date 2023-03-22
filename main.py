@@ -161,7 +161,7 @@ def run(filename: str, function_names: Collection[str], options: Collection[Cmdl
         if CmdlineOption.SHOW_GRAPH in options:
             viz_function(prog_func)
 
-        nip_func = nip.nip(prog_func)
+        nip_func = nip.nip(filename, prog_func)
         if CmdlineOption.SHOW_NIP in options:
             viz_function(nip_func)
 

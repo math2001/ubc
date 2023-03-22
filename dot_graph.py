@@ -343,7 +343,7 @@ def make_and_open_image(filepath: str) -> None:
     # https://bugzilla.mozilla.org/show_bug.cgi?id=308338
     # gotta use chrome
     p = subprocess.Popen(
-        ["chromium-browser", "--new-window", filepath + ".svg"],
+        ["chromium", "--new-window", filepath + ".svg"],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
@@ -391,9 +391,9 @@ if __name__ == "__main__":
     # viz_function(source.convert_function(functions[function_name]))
     func = source.convert_function(
         functions[function_name]).with_ghost(None)
-    nip_func = nip.nip(func)
+    nip_func = nip.nip(file_name, func)
     ghost_func = ghost_code.sprinkle_ghost_code(file_name, nip_func, functions)
     dsa_func = dsa.dsa(ghost_func)
     viz_function(dsa_func)
     assume_prove.pretty_print_prog(
-        assume_prove.make_prog(dsa_func))
+        assume_prove.make_prog(dsa_func, True))  # assume the function terminates, not relevant for

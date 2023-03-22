@@ -24,7 +24,7 @@ T = source.expr_true
 F = source.expr_false
 
 
-def get(file_name: str, func_name: str) -> source.Ghost[source.HumanVarName] | None:
+def get(file_name: str, func_name: str) -> source.FuncGhost[source.HumanVarName] | None:
     if file_name.endswith('.c'):
         file_name = file_name[:-len('.c')] + '.txt'
     if file_name in universe and func_name in universe[file_name]:
@@ -110,7 +110,7 @@ universe = {
     "tests/all.txt": {
         # 3 <= i ==> a = 1
         # 3:w32 <=s i:w32 ==> a:w32 = 1:w32
-        "tmp.undefined_var_with_loops": source.Ghost(
+        "tmp.undefined_var_with_loops": source.FuncGhost(
             loop_invariants={
                 lh("5"): conj(imp(sle(i32(3), i32v("i")), eq(i32v("a"), i32(1))), sbounded(i32v("i"), i32(0), i32(5)))
             },
@@ -118,7 +118,7 @@ universe = {
             postcondition=T,
         ),
 
-        "tmp.multiple_loops___fail_missing_invariant": source.Ghost(
+        "tmp.multiple_loops___fail_missing_invariant": source.FuncGhost(
             loop_invariants={
                 # no need to think, i is always going to be less than 200, and
                 # that's enough to prove no overflows
@@ -131,7 +131,7 @@ universe = {
             postcondition=T,
         ),
 
-        "tmp.arith_sum": source.Ghost(
+        "tmp.arith_sum": source.FuncGhost(
             loop_invariants={
                 # 0 <= i <= n
                 # s = i * (i - 1) / 2
@@ -148,14 +148,14 @@ universe = {
                 mul(i32v('n'), sub(i32v('i'), i32(1))), i32(2))),
         ),
 
-        "tmp.multiple_ret_incarnations___fail_missing_invariants": source.Ghost(
+        "tmp.multiple_ret_incarnations___fail_missing_invariants": source.FuncGhost(
             loop_invariants={lh('5'): T},
             precondition=sle(i32(0), i32v('n')),
             postcondition=eq(i32ret, udiv(i32v('n'), i32(2))),
         )
     },
     "./examples/libsel4cp_trunc.txt": {
-        "libsel4cp.handler_loop": source.Ghost(
+        "libsel4cp.handler_loop": source.FuncGhost(
             loop_invariants={lh('3'):
                              conjs(
                 source.expr_implies(neq(charv('have_reply'), char(0)), eq(
@@ -183,28 +183,41 @@ universe = {
             },
             precondition=T,
             postcondition=T,
-            variables=[source.ExprVar(typ=SMTTyMaybe(SMTTyTuple(
-                SMTTyCh(), SMTTyMsgInfo())), name=SMTVarName("lc_unhandled_ppcall"))]
         ),
-        "libsel4cp.protected": source.Ghost(
+        "libsel4cp.protected": source.FuncGhost(
             loop_invariants={},
             precondition=conjs(
-                eq(source.lower_expr(source.ExprFunction(typ=SMTTyBitVec(1), function_name=source.FunctionName("Maybe_Prod_Ch_MsgInfo_constructor"), arguments=[source.ExprVar(typ=SMTTyMaybe(SMTTyTuple(SMTTyCh(), SMTTyMsgInfo())), name=SMTVarName("lc_unhandled_ppcall"))
-                                                                                                                                                                ])), source.lower_expr(source.ExprFunction(typ=SMTTyBitVec(1), function_name=source.FunctionName("construct-prod-just"), arguments=[
-                                                                                                                                                                    source.promote_expr(
-                                                                                                                                                                        i64v('ch')),
-                                                                                                                                                                    source.promote_expr(
-                                                                                                                                                                        i64v('msginfo')),
-                                                                                                                                                                ]))),
+                eq(source.lower_expr(source.ExprVar(typ=SMTTyMaybe(SMTTyTuple(SMTTyCh(), SMTTyMsgInfo())), name=SMTVarName("lc_unhandled_ppcall"))), source.lower_expr(source.ExprFunction(typ=SMTTyMaybe(SMTTyTuple(SMTTyCh(), SMTTyMsgInfo())), function_name=source.FunctionName("construct-prod-just"), arguments=[
+                    source.promote_expr(
+                        i64v('ch')),
+                    source.promote_expr(
+                        i64v('msginfo')),
+                ]))),
             ),
-            postcondition=T,
-            variables=[source.ExprVar(typ=SMTTyMaybe(SMTTyTuple(
-                SMTTyCh(), SMTTyMsgInfo())), name=SMTVarName("lc_unhandled_ppcall"))]
+            postcondition=eq(source.lower_expr(source.ExprVar(typ=SMTTyMaybe(SMTTyTuple(SMTTyCh(), SMTTyMsgInfo())), name=SMTVarName(
+                "lc_unhandled_ppcall"))), source.lower_expr(source.ExprFunction(typ=SMTTyMaybe(SMTTyTuple(SMTTyCh(), SMTTyMsgInfo())), function_name=source.FunctionName('Maybe_Prod_Ch_MsgInfo_Nothing'), arguments=[]))),
         ),
     },
 }
 
+new_universe: Dict[str, source.FileGhost[source.HumanVarName]] = {
+    "./examples/libsel4cp_trunc.txt": source.FileGhost(
+        {
+            "libsel4cp.protected": source.FuncGhost(loop_invariants={},
+                                                    precondition=conjs(
+                eq(source.lower_expr(source.ExprVar(typ=SMTTyMaybe(SMTTyTuple(SMTTyCh(), SMTTyMsgInfo())), name=SMTVarName("lc_unhandled_ppcall"))), source.lower_expr(source.ExprFunction(typ=SMTTyMaybe(SMTTyTuple(SMTTyCh(), SMTTyMsgInfo())), function_name=source.FunctionName("construct-prod-just"), arguments=[
+                    source.promote_expr(
+                        i64v('ch')),
+                    source.promote_expr(
+                        i64v('msginfo')),
+                ]))),
+            ),
+                postcondition=eq(source.lower_expr(source.ExprVar(typ=SMTTyMaybe(SMTTyTuple(SMTTyCh(), SMTTyMsgInfo())), name=SMTVarName(
+                    "lc_unhandled_ppcall"))), source.lower_expr(source.ExprFunction(typ=SMTTyMaybe(SMTTyTuple(SMTTyCh(), SMTTyMsgInfo())), function_name=source.FunctionName('Maybe_Prod_Ch_MsgInfo_Nothing'), arguments=[]))),
+            ),
 
-x = source.lower_expr(source.ExprVar(typ=SMTTyMaybe(SMTTyTuple(
-    SMTTyCh(), SMTTyMsgInfo())), name=SMTVarName("lc_unhandled_ppcall")))
-print(x)
+        },
+        variables=[source.ExprVar(typ=SMTTyMaybe(SMTTyTuple(
+            SMTTyCh(), SMTTyMsgInfo())), name=SMTVarName("lc_unhandled_ppcall"))],
+    )
+}

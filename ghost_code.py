@@ -303,24 +303,26 @@ def sprinkle_call_conditions(filename: str, fn: nip.Function, ctx: Dict[str, sou
 
         ghost = ghost_data.get(filename, node.fname)
         self_ghost = ghost_data.get(filename, fn.name)
-        ghost_variables = Sequence() if self_ghost is None else self_ghost.variables
+        ghost_variables = [] if self_ghost is None else self_ghost.variables
         # asserting True and assuming True is basically doing nothing
         raw_precondition = source.expr_true if ghost is None else ghost.precondition
         raw_postcondition = source.expr_true if ghost is None else ghost.postcondition
         call_target = ctx[node.fname]
         assert call_target is not None
 
-        conversion_map = {}
+        conversion_map: Dict[source.ExprVarT[source.HumanVarName],
+                             source.ExprT[source.ProgVarName | nip.GuardVarName]] = {}
         for ghost_var in ghost_variables:
             c_ghost_var_human = source.lower_expr(ghost_var)
             assert isinstance(c_ghost_var_human, source.ExprVar)
             c_ghost_var = source.ExprVar(
-                c_ghost_var_human.typ, source.ProgVarName(c_ghost_var_human.name))
+                c_ghost_var_human.typ, source.ProgVarName(c_ghost_var_human.name.subject))
 
             conversion_map[c_ghost_var_human] = c_ghost_var
 
         conversion_map, precondition = unify_preconds(
             raw_precondition, node.args, call_target.arguments, conversion_map)
+        print(precondition)
         postcondition = unify_postconds(
             raw_postcondition, node.rets, call_target.returns, conversion_map)
         yield from sprinkle_call_assert_preconditions(fn, name, precondition)

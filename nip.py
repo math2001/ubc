@@ -19,6 +19,7 @@ import abc_cfg
 from typing import Any, Callable, DefaultDict, Iterator, Mapping, NewType, Sequence, Set, TypeAlias, overload
 from typing_extensions import assert_never
 import source
+import ghost_data
 
 
 class GuardVarName(str):
@@ -33,7 +34,7 @@ class GenericFunction(source.GenericFunction[source.VarNameKind, source.VarNameK
     """
     Non-initialized protected function
     """
-    ghost: source.Ghost[source.VarNameKind2]
+    ghost: source.FuncGhost[source.VarNameKind2]
 
 
 Function = GenericFunction[source.ProgVarName |
@@ -117,7 +118,7 @@ class UnificationError(Exception):
     pass
 
 
-def unify_variables_to_make_ghost(func: source.Function, conversion_map: DefaultDict[source.ExprVarT[source.HumanVarName], list[source.ExprVarT[source.ProgVarName | GuardVarName]]]) -> source.Ghost[source.ProgVarName | GuardVarName]:
+def unify_variables_to_make_ghost(func: source.Function, conversion_map: DefaultDict[source.ExprVarT[source.HumanVarName], list[source.ExprVarT[source.ProgVarName | GuardVarName]]]) -> source.FuncGhost[source.ProgVarName | GuardVarName]:
 
     # FIXME: make this more efficient if needed
     all_vars = func.all_variables()
@@ -160,7 +161,7 @@ def unify_variables_to_make_ghost(func: source.Function, conversion_map: Default
 
         return converter(human)
 
-    return source.Ghost(
+    return source.FuncGhost(
         precondition=source.convert_expr_vars(
             converter, func.ghost.precondition),
         postcondition=source.convert_expr_vars(
@@ -168,7 +169,7 @@ def unify_variables_to_make_ghost(func: source.Function, conversion_map: Default
         loop_invariants={lh: source.convert_expr_vars(converter, inv) for lh, inv in func.ghost.loop_invariants.items()})
 
 
-def nip(func: source.Function) -> Function:
+def nip(filename: str, func: source.Function) -> Function:
     """
     - after the entry node, forall all arguments a, set <a>_initialized = true in a
       basic block.
@@ -275,7 +276,9 @@ def nip(func: source.Function) -> Function:
 
     conversion_map: DefaultDict[source.ExprVarT[source.HumanVarName],
                                 list[source.ExprVarT[source.ProgVarName | GuardVarName]]] = defaultdict(list)
-    for ghost_var in func.ghost.variables:
+    self_ghost = ghost_data.get(filename, func.name)
+    assert self_ghost is not None
+    for ghost_var in self_ghost.variables:
         c_ghost_var_human = source.lower_expr(ghost_var)
         assert isinstance(c_ghost_var_human, source.ExprVar)
         c_ghost_var = source.ExprVar(

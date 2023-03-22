@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum, unique
-from typing import Any, Callable, Generic, Iterator, Literal, Mapping, NamedTuple, NewType, Sequence, Set, TypeAlias, TypeVar, Tuple
+from typing import Any, Callable, Generic, Iterator, Literal, Mapping, NamedTuple, NewType, Sequence, Set, TypeAlias, TypeVar, Tuple, Dict
 from typing_extensions import assert_never
 import source
 import syntax
@@ -11,6 +11,7 @@ from smt_types import *
 
 def lower_type(ty: SMTType) -> source.Type:
     return source.TypeBitVec(ty.bvsize)
+
 
 def promote_type(ty: source.Type) -> SMTType:
     if isinstance(ty, source.TypeBitVec):
@@ -27,6 +28,7 @@ def lower_expr(e: source.Expr[SMTType, SMTVarName]) -> source.Expr[source.Type, 
         return source.ExprFunction(lower_type(e.typ), function_name=e.function_name, arguments=[lower_expr(arg) for arg in e.arguments])
     else:
         assert False, f"didn't expect to see anything else being lowered {e}"
+
 
 def promote_expr(e: source.Expr[Type, HumanVarName]) -> source.Expr[SMTType, SMTVarName]:
     if isinstance(e, source.ExprVar):
@@ -550,6 +552,14 @@ def expr_eq(lhs: ExprT[VarNameKind], rhs: ExprT[VarNameKind]) -> ExprT[VarNameKi
     return ExprOp(type_bool, Operator.EQUALS, (lhs, rhs))
 
 
+def bvcast_higher(var: ExprVarT[VarNameKind], sz: int) -> ExprOpT[VarNameKind]:
+    """ casts into a bigger bit vector"""
+    assert isinstance(var.typ, TypeBitVec)
+    assert var.typ.size < sz
+    lhs = ExprNum(TypeBitVec(sz-var.typ.size), 0)
+    return ExprOp(TypeBitVec(sz), Operator.CONCAT, operands=(lhs, var))
+
+
 def mk_binary_bitvec_operation(op: Operator) -> Callable[[ExprT[VarNameKind], ExprT[VarNameKind]], ExprT[VarNameKind]]:
     def f(lhs: ExprT[VarNameKind], rhs: ExprT[VarNameKind]) -> ExprT[VarNameKind]:
         assert lhs.typ == rhs.typ
@@ -913,22 +923,27 @@ class GhostlessFunction(Generic[VarNameKind, VarNameKind2]):
                 self, n, with_loop_targets=True))
         return all_vars
 
-    def with_ghost(self, ghost: Ghost[HumanVarName] | None) -> GenericFunction[VarNameKind, HumanVarName]:
+    def with_ghost(self, ghost: FuncGhost[HumanVarName] | None) -> GenericFunction[VarNameKind, HumanVarName]:
         if ghost is None:
-            ghost = Ghost(precondition=expr_true,
-                          postcondition=expr_true,
-                          loop_invariants={
-                              lh: expr_true for lh in self.loops.keys()},
-                          )
+            ghost = FuncGhost(precondition=expr_true,
+                              postcondition=expr_true,
+                              loop_invariants={
+                                  lh: expr_true for lh in self.loops.keys()},
+                              )
         assert self.loops.keys() == ghost.loop_invariants.keys(), "loop invariants don't match"
         return GenericFunction(name=self.name, nodes=self.nodes, loops=self.loops, signature=self.signature, cfg=self.cfg, ghost=ghost)
 
 
 @dataclass(frozen=True)
-class Ghost(Generic[VarNameKind]):
+class FuncGhost(Generic[VarNameKind]):
     precondition: ExprT[VarNameKind]
     postcondition: ExprT[VarNameKind]
     loop_invariants: Mapping[LoopHeaderName, Expr[Type, VarNameKind]]
+
+
+@dataclass(frozen=True)
+class FileGhost(Generic[VarNameKind]):
+    fn_ghost: Dict[str, FuncGhost[VarNameKind]]
     variables: Sequence[source.ExprVar[SMTType, SMTVarName]] = field(
         default_factory=lambda: [])
     smt_functions: Sequence[source.ExprFunction[SMTType,
@@ -937,7 +952,7 @@ class Ghost(Generic[VarNameKind]):
 
 @dataclass(frozen=True)
 class GenericFunction(GhostlessFunction[VarNameKind, VarNameKind2]):
-    ghost: Ghost[VarNameKind2]
+    ghost: FuncGhost[VarNameKind2]
 
 
 Function = GenericFunction[ProgVarName, HumanVarName]

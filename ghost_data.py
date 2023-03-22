@@ -24,13 +24,12 @@ T = source.expr_true
 F = source.expr_false
 
 
-
 def get(file_name: str, func_name: str) -> source.Ghost[source.HumanVarName] | None:
-    if file_name not in universe:
-        return None
-    if func_name not in universe[file_name]:
-        return None
-    return universe[file_name][func_name]
+    if file_name.endswith('.c'):
+        file_name = file_name[:-len('.c')] + '.txt'
+    if file_name in universe and func_name in universe[file_name]:
+        return universe[file_name][func_name]
+    return None
 
 
 def conjs(*xs: source.ExprT[source.VarNameKind]) -> source.ExprT[source.VarNameKind]:

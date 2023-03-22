@@ -278,7 +278,8 @@ def nip(filename: str, func: source.Function) -> Function:
     conversion_map: DefaultDict[source.ExprVarT[source.HumanVarName],
                                 list[source.ExprVarT[source.ProgVarName | GuardVarName]]] = defaultdict(list)
     self_ghost = ghost_data.get(filename, func.name)
-    variables: Sequence[source.ExprVar[smt_types.SMTType, smt_types.SMTVarName]] = [] if self_ghost is None else self_ghost.variables
+    variables: Sequence[source.ExprVar[smt_types.SMTType, smt_types.SMTVarName]] = [
+    ] if self_ghost is None else self_ghost.variables
     for ghost_var in variables:
         c_ghost_var_human = source.lower_expr(ghost_var)
         assert isinstance(c_ghost_var_human, source.ExprVar)

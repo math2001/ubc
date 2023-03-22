@@ -342,7 +342,8 @@ def emit_prelude() -> Sequence[Cmd]:
 
 def make_smtlib(p: assume_prove.AssumeProveProg, debug: bool, filename: str, fn_name: str) -> Tuple[Sequence[Cmd], SMTLIB]:
     self_ghost = ghost_data.get(filename, fn_name)
-    variables: Sequence[source.ExprVar[SMTType, SMTVarName]] = [] if self_ghost is None else self_ghost.variables
+    variables: Sequence[source.ExprVar[SMTType, SMTVarName]
+                        ] = [] if self_ghost is None else self_ghost.variables
 
     emited_identifiers: set[Identifier] = set()
     emited_variables: set[assume_prove.VarName] = set()

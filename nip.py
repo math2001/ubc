@@ -16,8 +16,8 @@ from dataclasses import dataclass
 import dataclasses
 from functools import reduce
 import abc_cfg
-from typing import Any, Callable, Iterator, Mapping, NewType, Sequence, Set, TypeAlias, overload
-from typing_extensions import assert_never
+from typing import Any, Callable, Iterator, Mapping, NewType, Sequence, Set, overload, Union
+from typing_extensions import assert_never, TypeAlias
 from global_smt_variables import PLATFORM_CONTEXT_BIT_SIZE, is_global_smt
 import source
 
@@ -37,8 +37,8 @@ class GenericFunction(source.GenericFunction[source.VarNameKind, source.VarNameK
     ghost: source.Ghost[source.VarNameKind2]
 
 
-Function = GenericFunction[source.ProgVarName |
-                           GuardVarName, source.ProgVarName | GuardVarName]
+Function = GenericFunction[Union[source.ProgVarName,
+                           GuardVarName], Union[source.ProgVarName, GuardVarName]]
 
 
 @dataclass(frozen=True)
@@ -51,7 +51,7 @@ class NodeStateUpdate(source.NodeBasic[GuardVarName]):
     pass
 
 
-Node: TypeAlias = NodeGuard | NodeStateUpdate
+Node: TypeAlias = Union[NodeGuard, NodeStateUpdate]
 
 
 def guard_name(name: source.ProgVarName) -> GuardVarName:
@@ -103,7 +103,7 @@ def make_initial_state(func: source.Function) -> Iterator[source.Update[GuardVar
 def update_node_successors(node: source.Node[source.VarNameKind], successors: Sequence[source.NodeName]) -> source.Node[source.VarNameKind]:
     # FIXME: DANGER this successor ordering is pretty dangerous
     #        find a way to do this more safely.
-    if isinstance(node, source.NodeBasic | source.NodeCall | source.NodeEmpty | source.NodeAssume | source.NodeAssert):
+    if isinstance(node, source.NodeBasic) or isinstance(node, source.NodeCall) or isinstance(node, source.NodeEmpty) or isinstance(node, source.NodeAssume) or isinstance(node, source.NodeAssert):
         assert len(successors) == 1, "wrong number of successors for node"
         return dataclasses.replace(node, succ=successors[0])
 
@@ -199,23 +199,23 @@ def nip(func: source.Function) -> Function:
 
     for n in func.traverse_topologically(skip_err_and_ret=True):
         node = func.nodes[n]
-        if isinstance(node, source.NodeBasic | source.NodeCall | source.NodeCond):
+        if isinstance(node, source.NodeBasic) or isinstance(node, source.NodeCall) or isinstance(node, source.NodeCond):
             assert n not in protections
             p = make_protection_for_node(node)
             if p != source.expr_true:
                 protections[n] = p
-        elif isinstance(node, source.NodeAssume | source.NodeAssert):
+        elif isinstance(node, source.NodeAssume) or isinstance(node, source.NodeAssert):
             # TODO(nice to have): we could make this type safe
             assert False, "didn't expect to see node assume during this stage"
         elif not isinstance(node, source.NodeEmpty):
             assert_never(node)
 
-        if isinstance(node, source.NodeBasic | source.NodeCall):
+        if isinstance(node, source.NodeBasic) or isinstance(node, source.NodeCall):
             assert n not in state_updates
             upds = tuple(make_state_update_for_node(node))
             if len(upds) > 0:
                 state_updates[n] = upds
-        elif not isinstance(node, source.NodeEmpty | source.NodeCond):
+        elif not isinstance(node, source.NodeEmpty) and not isinstance(node, source.NodeCond):
             assert_never(node)
 
     # Before: Node1 ----------------------------------------------> Node2
@@ -261,8 +261,7 @@ def nip(func: source.Function) -> Function:
             # we are lucky, if we have a state update, then we can only have
             # one successor because only NodeBasic and NodeCall have
             # successors
-            assert isinstance(node, source.NodeBasic |
-                              source.NodeCall | source.NodeEmpty), f"{type(node)}"
+            assert isinstance(node, source.NodeBasic) or isinstance(node, source.NodeCall) or isinstance(node, source.NodeEmpty), f"{type(node)}"
             assert len(jump_to) == 1
             update_name = source.NodeName(f'upd_n{n}')
             new_nodes[update_name] = NodeStateUpdate(

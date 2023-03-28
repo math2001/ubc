@@ -1,8 +1,8 @@
 from __future__ import annotations
 from enum import Enum
 import subprocess
-from typing import Any, Iterator, Literal, Mapping, Sequence, TypeAlias
-from typing_extensions import NamedTuple, NewType, assert_never
+from typing import Any, Iterator, Literal, Mapping, Sequence, Union
+from typing_extensions import NamedTuple, NewType, assert_never, TypeAlias
 
 import textwrap
 import assume_prove
@@ -117,7 +117,7 @@ class CmdComment(NamedTuple):
 
 EmptyLine = CmdComment('')
 
-Cmd = CmdDeclareFun | CmdDefineFun | CmdAssert | CmdCheckSat | CmdComment | CmdSetLogic | CmdDeclareSort
+Cmd = Union[CmdDeclareFun, CmdDefineFun, CmdAssert, CmdCheckSat, CmdComment, CmdSetLogic, CmdDeclareSort]
 
 
 ModelResponse: TypeAlias = CmdDefineFun
@@ -130,7 +130,7 @@ class CheckSatResponse(Enum):
 
 
 GetModelResponse = Sequence[ModelResponse]
-Response = CheckSatResponse | GetModelResponse
+Response = Union[CheckSatResponse, GetModelResponse]
 Responses = Sequence[Response]
 
 
@@ -241,7 +241,7 @@ def emit_expr(expr: source.ExprT[assume_prove.VarName]) -> SMTLIB:
         return SMTLIB(f'({ops_to_smt[expr.operator]} {" ".join(emit_expr(op) for op in expr.operands)})')
     elif isinstance(expr, source.ExprVar):
         return SMTLIB(f'{identifier(expr.name)}')
-    elif isinstance(expr, source.ExprSymbol | source.ExprType):
+    elif isinstance(expr, source.ExprSymbol) or isinstance(expr, source.ExprType):
         assert False, "what do i do with this?"
     elif isinstance(expr, source.ExprFunction):
         if len(expr.arguments) == 0:

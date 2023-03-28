@@ -1,6 +1,6 @@
 from functools import reduce
-from typing import Mapping, NamedTuple, NewType, Sequence, TypeAlias, cast, overload
-from typing_extensions import assert_never
+from typing import Mapping, NamedTuple, NewType, Sequence, cast, overload, Union
+from typing_extensions import assert_never, TypeAlias
 import dsa
 from global_smt_variables import is_global_arbitrary, is_global_smt
 import nip
@@ -22,8 +22,8 @@ class InstructionProve(NamedTuple):
     expr: source.ExprT[VarName]
 
 
-Instruction = InstructionAssume | InstructionProve
-Script = Sequence[InstructionAssume | InstructionProve]
+Instruction = Union[InstructionAssume, InstructionProve]
+Script = Sequence[Union[InstructionAssume, InstructionProve]]
 
 
 class AssumeProveProg(NamedTuple):
@@ -43,11 +43,11 @@ def node_ok_ap_var(n: source.NodeName) -> APVar:
     return source.ExprVar(source.type_bool, VarName(node_ok_name(n)))
 
 
-def convert_dsa_var_to_ap_var(var: dsa.Incarnation[source.ProgVarName | nip.GuardVarName]) -> VarName:
+def convert_dsa_var_to_ap_var(var: dsa.Incarnation[Union[source.ProgVarName, nip.GuardVarName]]) -> VarName:
     return VarName(f'{var.base}~{var.inc}')
 
 
-def convert_expr_var(expr: source.ExprVarT[dsa.Incarnation[source.ProgVarName | nip.GuardVarName]]) -> APVar:
+def convert_expr_var(expr: source.ExprVarT[dsa.Incarnation[Union[source.ProgVarName, nip.GuardVarName]]]) -> APVar:
     return source.ExprVar(expr.typ, name=convert_dsa_var_to_ap_var(expr.name))
 
 
@@ -56,16 +56,16 @@ def convert_expr_var(expr: source.ExprVarT[dsa.Incarnation[source.ProgVarName | 
 
 
 @overload
-def convert_expr_dsa_vars_to_ap(expr: source.ExprVarT[dsa.Incarnation[source.ProgVarName | nip.GuardVarName]]) -> source.ExprVarT[VarName]:
+def convert_expr_dsa_vars_to_ap(expr: source.ExprVarT[dsa.Incarnation[Union[source.ProgVarName, nip.GuardVarName]]]) -> source.ExprVarT[VarName]:
     ...
 
 
 @overload
-def convert_expr_dsa_vars_to_ap(expr: source.ExprT[dsa.Incarnation[source.ProgVarName | nip.GuardVarName]]) -> source.ExprT[VarName]:
+def convert_expr_dsa_vars_to_ap(expr: source.ExprT[dsa.Incarnation[Union[source.ProgVarName, nip.GuardVarName]]]) -> source.ExprT[VarName]:
     ...
 
 
-def convert_expr_dsa_vars_to_ap(expr: source.ExprT[dsa.Incarnation[source.ProgVarName | nip.GuardVarName]]) -> source.ExprT[VarName]:
+def convert_expr_dsa_vars_to_ap(expr: source.ExprT[dsa.Incarnation[Union[source.ProgVarName, nip.GuardVarName]]]) -> source.ExprT[VarName]:
     if isinstance(expr, source.ExprNum):
         return expr
     elif isinstance(expr, source.ExprVar):
@@ -74,14 +74,14 @@ def convert_expr_dsa_vars_to_ap(expr: source.ExprT[dsa.Incarnation[source.ProgVa
         return source.ExprOp(expr.typ, source.Operator(expr.operator), operands=tuple(
             convert_expr_dsa_vars_to_ap(operand) for operand in expr.operands
         ))
-    elif isinstance(expr, source.ExprType | source.ExprSymbol):
+    elif isinstance(expr, source.ExprType) or isinstance(expr, source.ExprSymbol):
         return expr
     elif isinstance(expr, source.ExprFunction):
         return source.ExprFunction(expr.typ, expr.function_name, [convert_expr_dsa_vars_to_ap(arg) for arg in expr.arguments], )
     assert_never(expr)
 
 
-def make_assume(var: dsa.Var[source.ProgVarName | nip.GuardVarName], expr: source.ExprT[dsa.Incarnation[source.ProgVarName | nip.GuardVarName]]) -> Instruction:
+def make_assume(var: dsa.Var[Union[source.ProgVarName, nip.GuardVarName]], expr: source.ExprT[dsa.Incarnation[Union[source.ProgVarName, nip.GuardVarName]]]) -> Instruction:
     """ Helper function to make things as readable as possible, we really don't want to get this wrong
     """
     lhs = source.ExprVar(var.typ, convert_dsa_var_to_ap_var(var.name))
@@ -91,11 +91,11 @@ def make_assume(var: dsa.Var[source.ProgVarName | nip.GuardVarName], expr: sourc
 
 
 # TODO: rename to base var to ap var
-def prog_var_to_ap_var(v: source.ExprVarT[source.ProgVarName | nip.GuardVarName]) -> APVar:
+def prog_var_to_ap_var(v: source.ExprVarT[Union[source.ProgVarName, nip.GuardVarName]]) -> APVar:
     return source.ExprVar(v.typ, VarName(v.name))
 
 
-def get_loop_count_target_var(loop: source.Loop[dsa.Incarnation[source.ProgVarName | nip.GuardVarName]]) -> source.ExprVarT[dsa.Incarnation[source.ProgVarName]]:
+def get_loop_count_target_var(loop: source.Loop[dsa.Incarnation[Union[source.ProgVarName, nip.GuardVarName]]]) -> source.ExprVarT[dsa.Incarnation[source.ProgVarName]]:
     for target in loop.targets:
         if target.name.base.startswith('loop#') and target.name.base.endswith('#count'):
             assert isinstance(target.name.base, source.ProgVarName)
@@ -104,7 +104,7 @@ def get_loop_count_target_var(loop: source.Loop[dsa.Incarnation[source.ProgVarNa
     assert False, "loop doesn't have a loop a counter automatically inserted by the c parser"
 
 
-def apply_incarnation_for_node(func: dsa.Function, n: source.NodeName, prog_var: source.ExprVarT[source.ProgVarName | nip.GuardVarName]) -> APVar:
+def apply_incarnation_for_node(func: dsa.Function, n: source.NodeName, prog_var: source.ExprVarT[Union[source.ProgVarName, nip.GuardVarName]]) -> APVar:
     # if a variable isn't defined at that node, we use an arbitrary value
     #
     # THIS IS A POTENTIAL SOURCE OF UNSOUDNESS
@@ -238,7 +238,7 @@ def make_assume_prove_script_for_node(func: dsa.Function, n: source.NodeName) ->
     return script
 
 
-def condition_to_take_path(func: dsa.Function, path: source.Path) -> source.ExprT[dsa.Incarnation[source.ProgVarName | nip.GuardVarName]]:
+def condition_to_take_path(func: dsa.Function, path: source.Path) -> source.ExprT[dsa.Incarnation[Union[source.ProgVarName, nip.GuardVarName]]]:
     assert False, "TODO: remove dead code"
     cond: source.ExprT[dsa.Incarnation[source.ProgVarName |
                                        nip.GuardVarName]] = source.expr_true

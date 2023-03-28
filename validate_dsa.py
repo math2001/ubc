@@ -1,4 +1,4 @@
-from typing import Collection, Sequence, Set
+from typing import Collection, Sequence, Set, Union
 from typing_extensions import assert_never
 import abc_cfg
 import source
@@ -54,7 +54,7 @@ def ensure_assigned_at_most_once(func: dsa.Function, path: Collection[source.Nod
             assigned_variables.extend(upd.var for upd in node.upds)
         elif isinstance(node, source.NodeCall):
             assigned_variables.extend(ret for ret in node.rets)
-        elif not isinstance(node, source.NodeEmpty | source.NodeCond | source.NodeAssume | source.NodeAssert):
+        elif not isinstance(node, source.NodeEmpty) and not isinstance(node, source.NodeCond) and not isinstance(node, source.NodeAssume) and not isinstance(node, source.NodeAssert):
             assert_never(node)
 
         if loop_header := func.is_loop_header(n):
@@ -120,10 +120,10 @@ def ensure_valid_dsa(dsa_func: dsa.Function) -> None:
         ensure_using_latest_incarnation(dsa_func, path)
 
 
-def assert_expr_equals_mod_dsa(lhs: source.ExprT[source.ProgVarName | nip.GuardVarName], rhs: source.ExprT[dsa.Incarnation[source.ProgVarName | nip.GuardVarName]]) -> None:
+def assert_expr_equals_mod_dsa(lhs: source.ExprT[Union[source.ProgVarName, nip.GuardVarName]], rhs: source.ExprT[dsa.Incarnation[Union[source.ProgVarName, nip.GuardVarName]]]) -> None:
     assert lhs.typ == rhs.typ
 
-    if isinstance(lhs, source.ExprNum | source.ExprSymbol | source.ExprType):
+    if isinstance(lhs, source.ExprNum) or isinstance(lhs, source.ExprSymbol) or isinstance(lhs, source.ExprType):
         assert lhs == rhs
     elif isinstance(lhs, source.ExprVar):
         assert isinstance(rhs, source.ExprVar)
@@ -144,11 +144,11 @@ def assert_expr_equals_mod_dsa(lhs: source.ExprT[source.ProgVarName | nip.GuardV
         assert_never(lhs)
 
 
-def assert_var_equals_mod_dsa(prog: source.ExprVarT[source.ProgVarName | nip.GuardVarName], var: dsa.Var[source.ProgVarName | nip.GuardVarName]) -> None:
+def assert_var_equals_mod_dsa(prog: source.ExprVarT[Union[source.ProgVarName, nip.GuardVarName]], var: dsa.Var[Union[source.ProgVarName, nip.GuardVarName]]) -> None:
     assert prog == dsa.unpack_dsa_var(var)[0]
 
 
-def assert_node_equals_mod_dsa(prog: source.Node[source.ProgVarName | nip.GuardVarName], node: source.Node[dsa.Incarnation[source.ProgVarName | nip.GuardVarName]]) -> None:
+def assert_node_equals_mod_dsa(prog: source.Node[Union[source.ProgVarName, nip.GuardVarName]], node: source.Node[dsa.Incarnation[Union[source.ProgVarName, nip.GuardVarName]]]) -> None:
     if isinstance(prog, source.NodeBasic):
         assert isinstance(node, source.NodeBasic)
 
@@ -175,8 +175,8 @@ def assert_node_equals_mod_dsa(prog: source.Node[source.ProgVarName | nip.GuardV
         assert isinstance(node, source.NodeCond)
         assert_expr_equals_mod_dsa(prog.expr, node.expr)
 
-    elif isinstance(prog, source.NodeAssume | source.NodeAssert):
-        assert isinstance(node, source.NodeAssume | source.NodeAssert)
+    elif isinstance(prog, source.NodeAssume) or isinstance(prog, source.NodeAssert):
+        assert isinstance(node, source.NodeAssume) or isinstance(node, source.NodeAssert)
         assert_expr_equals_mod_dsa(prog.expr, node.expr)
 
     elif isinstance(prog, source.NodeEmpty):
@@ -185,7 +185,7 @@ def assert_node_equals_mod_dsa(prog: source.Node[source.ProgVarName | nip.GuardV
         assert_never(prog)
 
 
-def assert_is_join_node(node: source.Node[dsa.Incarnation[source.ProgVarName | nip.GuardVarName]]) -> None:
+def assert_is_join_node(node: source.Node[dsa.Incarnation[Union[source.ProgVarName, nip.GuardVarName]]]) -> None:
     assert isinstance(node, dsa.NodeJoiner)
     for upd in node.upds:
         # ensure every update is of the form A.X = A.Y
@@ -295,12 +295,12 @@ def ensure_valid_variables(func: dsa.Function) -> None:
     var_types: dict[dsa.Incarnation[source.ProgVarName |
                                     nip.GuardVarName], source.Type] = {}
 
-    def add_or_ensure_same_typ(var_name: dsa.Incarnation[source.ProgVarName | nip.GuardVarName], typ: source.Type) -> None:
+    def add_or_ensure_same_typ(var_name: dsa.Incarnation[Union[source.ProgVarName, nip.GuardVarName]], typ: source.Type) -> None:
         if var_name in var_types:
             assert var_types[var_name] == typ
         var_types[var_name] = typ
 
-    def check_expr_visitor(expr: source.ExprT[dsa.Incarnation[source.ProgVarName | nip.GuardVarName]]) -> None:
+    def check_expr_visitor(expr: source.ExprT[dsa.Incarnation[Union[source.ProgVarName, nip.GuardVarName]]]) -> None:
         if isinstance(expr, source.ExprVar):
             add_or_ensure_same_typ(expr.name, expr.typ)
 
@@ -317,7 +317,7 @@ def ensure_valid_variables(func: dsa.Function) -> None:
                 source.visit_expr(arg, check_expr_visitor)
             for ret in node.rets:
                 add_or_ensure_same_typ(ret.name, ret.typ)
-        elif isinstance(node, source.NodeAssume | source.NodeCond | source.NodeAssert):
+        elif isinstance(node, source.NodeAssume) or isinstance(node, source.NodeCond) or isinstance(node, source.NodeAssert):
             source.visit_expr(node.expr, check_expr_visitor)
         elif not isinstance(node, source.NodeEmpty):
             assert_never(node)

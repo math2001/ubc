@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum, unique
-from typing import Any, Callable, Generic, Iterator, Literal, Mapping, NamedTuple, NewType, Sequence, Set, TypeAlias, TypeVar, Tuple
-from typing_extensions import assert_never
+from typing import Any, Callable, Generic, Iterator, Literal, Mapping, NamedTuple, NewType, Sequence, Set, TypeVar, Tuple, Union
+from typing_extensions import assert_never, TypeAlias
 from global_smt_variables import PLATFORM_CONTEXT_BIT_SIZE
 
 import syntax
@@ -125,7 +125,7 @@ class TypeWordArray:
     """
 
 
-Type = TypeStruct | TypeBitVec | TypePtr | TypeArray | TypeFloatingPoint | TypeBuiltin | TypeWordArray
+Type = Union[TypeStruct, TypeBitVec, TypePtr, TypeArray, TypeFloatingPoint, TypeBuiltin, TypeWordArray]
 
 
 def pretty_type_ascii(typ: Type) -> str:
@@ -381,13 +381,12 @@ class ExprOp(ABCExpr[TypeKind, VarNameKind]):
 ExprOpT: TypeAlias = ExprOp[Type, VarNameKind]
 
 
-Expr: TypeAlias = \
-    ExprVar[TypeKind, VarNameKind] \
-    | ExprNum[TypeKind] \
-    | ExprType[TypeKind] \
-    | ExprOp[TypeKind, VarNameKind] \
-    | ExprFunction[TypeKind, VarNameKind] \
-    | ExprSymbol[TypeKind] \
+Expr: TypeAlias = Union[ExprVar[TypeKind, VarNameKind],
+     ExprNum[TypeKind],
+     ExprType[TypeKind],
+     ExprOp[TypeKind, VarNameKind],
+     ExprFunction[TypeKind, VarNameKind],
+     ExprSymbol[TypeKind]]
 
 ExprT: TypeAlias = Expr[Type, VarNameKind]
 
@@ -414,8 +413,7 @@ def visit_expr(expr: ExprT[VarNameKind], visitor: Callable[[ExprT[VarNameKind]],
     elif isinstance(expr, ExprFunction):
         for arg in expr.arguments:
             visit_expr(arg, visitor)
-    elif not isinstance(expr, ExprVar
-                        | ExprNum | ExprType | ExprSymbol):
+    elif not isinstance(expr, ExprVar) and not isinstance(expr, ExprNum) and not isinstance(expr, ExprType) and not isinstance(expr, ExprSymbol):
         assert_never(expr)
 
 
@@ -747,8 +745,7 @@ class NodeAssert(Generic[VarNameKind]):
     succ: NodeName
 
 
-Node = NodeBasic[VarNameKind] | NodeCall[VarNameKind] | NodeCond[
-    VarNameKind] | NodeEmpty | NodeAssume[VarNameKind] | NodeAssert[VarNameKind]
+Node = Union[NodeBasic[VarNameKind], NodeCall[VarNameKind], NodeCond[VarNameKind], NodeEmpty, NodeAssume[VarNameKind], NodeAssert[VarNameKind]]
 
 LoopHeaderName = NewType('LoopHeaderName', NodeName)
 
@@ -930,7 +927,7 @@ def used_variables_in_node(node: Node[VarNameKind]) -> Set[ExprVarT[VarNameKind]
     elif isinstance(node, NodeCall):
         for arg in node.args:
             used_variables |= all_vars_in_expr(arg)
-    elif isinstance(node, NodeCond | NodeAssume | NodeAssert):
+    elif isinstance(node, NodeCond) or isinstance(node, NodeAssume) or isinstance(node, NodeAssert):
         used_variables |= all_vars_in_expr(node.expr)
     elif not isinstance(node, NodeEmpty):
         assert_never(node)
@@ -950,7 +947,7 @@ def assigned_variables_in_node(func: GhostlessFunction[VarNameKind, Any], n: Nod
     elif isinstance(node, NodeCall):
         assigned_variables.update(ret for ret in node.rets)
         expected_length += len(node.rets)
-    elif not isinstance(node, NodeEmpty | NodeCond | NodeAssume | NodeAssert):
+    elif not isinstance(node, NodeEmpty) and not isinstance(node, NodeCond) and not isinstance(node, NodeAssume) and not isinstance(node, NodeAssert):
         # technically, NodeAssume can encode an assignment
         # but it's just the wrong tool for the job, because the nip
         # stage won't automatically know that it was assigned,

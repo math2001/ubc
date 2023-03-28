@@ -1,6 +1,6 @@
 from typing_extensions import assert_never
 import source
-from typing import Collection, Mapping, NamedTuple, Sequence, TypeVar, Callable, Generic
+from typing import Collection, Mapping, NamedTuple, Sequence, TypeVar, Callable, Generic, Union
 
 from utils import clen
 
@@ -30,7 +30,7 @@ def compute_all_successors_from_nodes(nodes: Mapping[source.NodeName, source.Nod
     all_succs: dict[source.NodeName, list[source.NodeName]] = {}
     for name, node in nodes.items():
         all_succs[name] = []
-        if isinstance(node, source.NodeBasic | source.NodeCall | source.NodeEmpty | source.NodeAssume | source.NodeAssert):
+        if isinstance(node, source.NodeBasic) or isinstance(node, source.NodeCall) or isinstance(node, source.NodeEmpty) or isinstance(node, source.NodeAssume) or isinstance(node, source.NodeAssert):
             all_succs[name].append(node.succ)
         elif isinstance(node, source.NodeCond):
             all_succs[name].append(node.succ_then)
@@ -172,7 +172,7 @@ def compute_loop_targets(
         elif isinstance(node, source.NodeCall):
             for ret in node.rets:
                 loop_targets.add(ret)
-        elif not isinstance(node, source.NodeEmpty | source.NodeCond | source.NodeAssume | source.NodeAssert):
+        elif not isinstance(node, source.NodeEmpty) and not isinstance(node, source.NodeCond) and not isinstance(node, source.NodeAssume) and not isinstance(node, source.NodeAssert):
             assert_never(node)
 
         for succ in cfg.all_succs[n]:

@@ -1,7 +1,7 @@
 from functools import reduce
 from math import prod
 from sys import platform
-from typing import Callable
+from typing import Callable, Union
 import source
 from global_smt_variables import PLATFORM_CONTEXT_BIT_SIZE
 
@@ -26,7 +26,7 @@ T = source.expr_true
 F = source.expr_false
 
 
-def get(file_name: str, func_name: str) -> source.Ghost[source.HumanVarName] | None:
+def get(file_name: str, func_name: str) -> Union[source.Ghost[source.HumanVarName], None]:
     if file_name.endswith('.c'):
         file_name = file_name[:-len('.c')] + '.txt'
     if file_name in universe and func_name in universe[file_name]:
@@ -256,13 +256,13 @@ def wf_MsgInfo(msginfo: source.ExprT[source.HumanVarName]) -> source.ExprT[sourc
 def platform_context_update(
     base_lc: source.ExprT[source.HumanVarName],
     *,
-    lc_running_pd_val: source.ExprT[source.HumanVarName] | None = None,
-    lc_receive_oracle_val: source.ExprT[source.HumanVarName] | None = None,
-    lc_unhandled_notified_val: source.ExprT[source.HumanVarName] | None = None,
-    lc_last_handled_notified_val: source.ExprT[source.HumanVarName] | None = None,
-    lc_unhandled_ppcall_val: source.ExprT[source.HumanVarName] | None = None,
-    lc_unhandled_reply_val: source.ExprT[source.HumanVarName] | None = None,
-    lc_last_handled_reply_val: source.ExprT[source.HumanVarName] | None = None,
+    lc_running_pd_val: Union[source.ExprT[source.HumanVarName], None] = None,
+    lc_receive_oracle_val: Union[source.ExprT[source.HumanVarName], None] = None,
+    lc_unhandled_notified_val: Union[source.ExprT[source.HumanVarName], None] = None,
+    lc_last_handled_notified_val: Union[source.ExprT[source.HumanVarName], None] = None,
+    lc_unhandled_ppcall_val: Union[source.ExprT[source.HumanVarName], None] = None,
+    lc_unhandled_reply_val: Union[source.ExprT[source.HumanVarName], None] = None,
+    lc_last_handled_reply_val: Union[source.ExprT[source.HumanVarName], None] = None,
 ) -> source.ExprT[source.HumanVarName]:
     """
     Copies every field from base_lc, apart from the specified fields.

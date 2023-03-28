@@ -16,7 +16,7 @@ insert_loop_invariant()
 from dataclasses import dataclass
 import dataclasses
 from enum import Enum, unique
-from typing import Callable, Iterable, Mapping, NamedTuple, Sequence, Tuple, Any, Iterator, Dict
+from typing import Callable, Iterable, Mapping, NamedTuple, Sequence, Tuple, Any, Iterator, Dict, Union
 from typing_extensions import assert_never
 
 import abc_cfg
@@ -57,12 +57,12 @@ class NodeAssumePostCondFnCall(source.NodeAssume[source.VarNameKind]):
     pass
 
 
-NodeGhostCode = (NodePostConditionProofObligation[source.VarNameKind]
-                 | NodePreconditionAssumption[source.VarNameKind]
-                 | NodeLoopInvariantAssumption[source.VarNameKind]
-                 | NodeLoopInvariantProofObligation[source.VarNameKind]
-                 | NodePrecondObligationFnCall[source.VarNameKind]
-                 | NodeAssumePostCondFnCall[source.VarNameKind])
+NodeGhostCode = Union[NodePostConditionProofObligation[source.VarNameKind]
+                 , NodePreconditionAssumption[source.VarNameKind]
+                 , NodeLoopInvariantAssumption[source.VarNameKind]
+                 , NodeLoopInvariantProofObligation[source.VarNameKind]
+                 , NodePrecondObligationFnCall[source.VarNameKind]
+                 , NodeAssumePostCondFnCall[source.VarNameKind]]
 
 
 class GenericFunction(nip.GenericFunction[source.VarNameKind, source.VarNameKind2]):
@@ -72,8 +72,8 @@ class GenericFunction(nip.GenericFunction[source.VarNameKind, source.VarNameKind
     """
 
 
-Function = GenericFunction[source.ProgVarName |
-                           nip.GuardVarName, source.ProgVarName | nip.GuardVarName]
+Function = GenericFunction[Union[source.ProgVarName,
+                           nip.GuardVarName], Union[source.ProgVarName, nip.GuardVarName]]
 
 
 @unique
@@ -92,7 +92,7 @@ class Insertion(NamedTuple):
     after: source.NodeName
     before: source.NodeName
     kind: K
-    expr: source.ExprT[source.ProgVarName | nip.GuardVarName]
+    expr: source.ExprT[Union[source.ProgVarName, nip.GuardVarName]]
     node_name: source.NodeName
 
 
@@ -102,10 +102,10 @@ def no_insertion_on_same_edge(insertions: Sequence[Insertion]) -> bool:
 
 
 def insert_single_succ_node_on_edge(
-        nodes: dict[source.NodeName, source.Node[source.ProgVarName | nip.GuardVarName]],
+        nodes: dict[source.NodeName, source.Node[Union[source.ProgVarName, nip.GuardVarName]]],
         after_name: source.NodeName,
         before_name: source.NodeName,
-        constructor: Callable[[source.NodeName], tuple[source.NodeName, source.Node[source.ProgVarName | nip.GuardVarName]]]) -> None:
+        constructor: Callable[[source.NodeName], tuple[source.NodeName, source.Node[Union[source.ProgVarName, nip.GuardVarName]]]]) -> None:
     """
     constructor :: NodeName -> (NodeName, Node)
     constructor "name of new node successor" -> (name of new node, new node)
@@ -128,7 +128,7 @@ def insert_single_succ_node_on_edge(
 
     # make edge 1
     after = nodes[after_name]
-    if isinstance(after, source.NodeEmpty | source.NodeAssume | source.NodeBasic | source.NodeCall | source.NodeAssert):
+    if isinstance(after, source.NodeEmpty) or isinstance(after, source.NodeAssume) or isinstance(after, source.NodeBasic) or isinstance(after, source.NodeCall) or isinstance(after, source.NodeAssert):
         # just for type safety (dataclasses.replace isn't type checked)
         after.succ
         nodes[after_name] = dataclasses.replace(after, succ=new_node_name)
@@ -145,7 +145,7 @@ def insert_single_succ_node_on_edge(
         assert_never(after)
 
 
-def apply_insertions(func: nip.Function, insertions: Sequence[Insertion]) -> Mapping[source.NodeName, source.Node[source.ProgVarName | nip.GuardVarName]]:
+def apply_insertions(func: nip.Function, insertions: Sequence[Insertion]) -> Mapping[source.NodeName, source.Node[Union[source.ProgVarName, nip.GuardVarName]]]:
 
     # Inserting multiple nodes on the same edge ie.
     #
@@ -157,8 +157,8 @@ def apply_insertions(func: nip.Function, insertions: Sequence[Insertion]) -> Map
         insertions), ("not to worry, just need to handle inserting multiple nodes on the same edge. "
                       "Pay close attention of the intended order of the inserted nodes")
 
-    def make_constructor(ins: Insertion) -> Callable[[source.NodeName], tuple[source.NodeName, source.Node[source.ProgVarName | nip.GuardVarName]]]:
-        def constructor(succ: source.NodeName) -> tuple[source.NodeName, source.Node[source.ProgVarName | nip.GuardVarName]]:
+    def make_constructor(ins: Insertion) -> Callable[[source.NodeName], tuple[source.NodeName, source.Node[Union[source.ProgVarName, nip.GuardVarName]]]]:
+        def constructor(succ: source.NodeName) -> tuple[source.NodeName, source.Node[Union[source.ProgVarName, nip.GuardVarName]]]:
             # the value of kind of class of the node
             if ins.kind is K.POST_CONDITION_PROOF_OBLIGATION:
                 return ins.node_name, NodePostConditionProofObligation(ins.expr, succ_then=succ, succ_else=source.NodeNameErr)
@@ -251,12 +251,12 @@ def sprinkle_loop_invariants(func: nip.Function) -> Iterable[Insertion]:
         yield from sprinkle_loop_invariant(func, loop_header)
 
 
-def sprinkle_call_assert_preconditions(fn: nip.Function, name: source.NodeName, precond: source.ExprT[source.ProgVarName | nip.GuardVarName]) -> Iterable[Insertion]:
+def sprinkle_call_assert_preconditions(fn: nip.Function, name: source.NodeName, precond: source.ExprT[Union[source.ProgVarName, nip.GuardVarName]]) -> Iterable[Insertion]:
     for pred in fn.cfg.all_preds[name]:
         yield Insertion(node_name=source.NodeName(f"prove_{pred}_{name}"), after=pred, before=name, kind=K.NODE_PRE_CONDITION_OBLIGATION_FNCALL, expr=precond)
 
 
-def sprinkle_call_assume_postcondition(name: source.NodeName, node: source.NodeCall[Any], postcond: source.ExprT[source.ProgVarName | nip.GuardVarName]) -> Insertion:
+def sprinkle_call_assume_postcondition(name: source.NodeName, node: source.NodeCall[Any], postcond: source.ExprT[Union[source.ProgVarName, nip.GuardVarName]]) -> Insertion:
     return Insertion(node_name=source.NodeName(f"assume_postcond_{name}_{node.succ}"), after=name, before=node.succ, kind=K.NODE_ASSUME_POST_CONDITION_FNCALL, expr=postcond)
 
 

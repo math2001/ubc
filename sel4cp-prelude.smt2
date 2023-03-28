@@ -364,4 +364,7 @@
 (declare-fun lc_arbitrary_2 () (_ BitVec 407))
 (declare-fun lc_arbitrary_3 () (_ BitVec 407))
 (declare-fun lc_arbitrary_4 () (_ BitVec 407))
+
+; Zoltan: quick hack to get valid global int64s working
+(declare-fun badge_global_addr () (_ BitVec 61))
 ; end of prelude

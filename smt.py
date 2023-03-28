@@ -43,6 +43,7 @@ ops_to_smt: Mapping[source.Operator, SMTLIB] = {
     source.Operator.WORD_ARRAY_ACCESS: SMTLIB("select"),
     source.Operator.WORD_ARRAY_UPDATE: SMTLIB("store"),
     source.Operator.MEM_DOM: SMTLIB("mem-dom"),
+    source.Operator.MEM_ACC: SMTLIB("select"),
 }
 
 # memsort for rv64 native
@@ -241,7 +242,11 @@ def emit_expr(expr: source.ExprT[assume_prove.VarName]) -> SMTLIB:
         return SMTLIB(f'({ops_to_smt[expr.operator]} {" ".join(emit_expr(op) for op in expr.operands)})')
     elif isinstance(expr, source.ExprVar):
         return SMTLIB(f'{identifier(expr.name)}')
-    elif isinstance(expr, source.ExprSymbol) or isinstance(expr, source.ExprType):
+    elif isinstance(expr, source.ExprSymbol):
+         # Zoltan: quick hack to get global symbols working (must be listed in prelude)
+         return SMTLIB("%s_global_addr" % expr.name)
+    elif isinstance(expr, source.ExprType):
+        print(expr)
         assert False, "what do i do with this?"
     elif isinstance(expr, source.ExprFunction):
         if len(expr.arguments) == 0:

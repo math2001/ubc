@@ -13,6 +13,7 @@ sub = source.expr_sub
 slt = source.expr_slt
 sle = source.expr_sle
 eq = source.expr_eq
+neg = source.expr_negate
 
 T = source.expr_true
 F = source.expr_false
@@ -28,6 +29,8 @@ def get(file_name: str, func_name: str) -> source.Ghost[source.HumanVarName] | N
 
 def conjs(*xs: source.ExprT[source.VarNameKind]) -> source.ExprT[source.VarNameKind]:
     # pyright is stupid, but mypy works it out (we only care about mypy)
+    if len(xs) == 0:
+        return T
     return reduce(source.expr_and, xs)  # pyright: ignore
 
 
@@ -159,7 +162,47 @@ universe = {
         "tmp.caller": source.Ghost(
             loop_invariants={},
             precondition=sbounded(i32v('b'), i32(-100), i32(100)),
-            postcondition=eq(i32ret, mul(plus(i32v('b'), i32(1)), i32(2))))
+            postcondition=eq(i32ret, mul(plus(i32v('b'), i32(1)), i32(2)))),
+
+        "tmp.caller2": source.Ghost(
+            loop_invariants={},
+            precondition=sbounded(i32v('b'), i32(-100), i32(100)),
+            postcondition=eq(i32ret, mul(plus(i32v('b'), i32(1)), mul(plus(i32v('b'), i32(1)), i32(2))))),
+
+        "tmp.caller2___fails_wrong_post_condition": source.Ghost(
+            loop_invariants={},
+            precondition=sbounded(i32v('b'), i32(-100), i32(100)),
+            postcondition=eq(i32ret, i32(0))),
+
+        "tmp.caller3": source.Ghost(
+            loop_invariants={},
+            precondition=sbounded(i32v('b'), i32(-100), i32(100)),
+            postcondition=eq(i32ret, i32(0))),
+
+        "tmp.f_many_args": source.Ghost(
+            loop_invariants={},
+            precondition=conjs(
+                sbounded(i32v('b'), i32(-100), i32(100)),
+                sbounded(i32v('c'), i32(-100), i32(100))
+            ),
+            postcondition=conjs(
+                imp(slt(i32(0), i32v('a')), eq(
+                    i32ret, mul(plus(i32v('b'), i32(1)), i32(2)))),
+                imp(neg(slt(i32(0), i32v('a'))), eq(
+                    i32ret, mul(sub(i32v('c'), i32(1)), i32(2)))),
+            ),
+        ),
+
+        "tmp.call_many_args": source.Ghost(
+            loop_invariants={},
+            precondition=sbounded(i32v('flag'), i32(-10), i32(10)),
+            postcondition=conjs(
+                imp(slt(i32(0), i32v('flag')), eq(i32ret, plus(
+                    i32(4), mul(plus(i32v('flag'), i32(1)), i32(2))))),
+                imp(neg(slt(i32(0), i32v('flag'))), eq(i32ret, plus(
+                    i32(2), mul(sub(i32v('flag'), i32(1)), i32(2))))),
+            ),
+        )
     },
 
     "tests/libsel4cp_trunc.txt": {

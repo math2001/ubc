@@ -436,3 +436,38 @@ int caller(int b)
 {
     return callee(b) * 2;
 }
+
+int caller2(int b)
+{
+    // (b+1) * ((b+1)*2)
+    return callee(b) * caller(b);
+}
+
+int caller2___fails_wrong_post_condition(int b)
+{
+    // (b+1) * ((b+1)*2)
+    return callee(b) * caller(b);
+}
+
+int f_many_args(int a, int b, int c)
+{
+    if (a > 0)
+        a = b + 1;
+    else
+        a = c - 1;
+    return a * 2;
+}
+
+int call_many_args(int flag)
+{
+    int v = f_many_args(flag, 1, 2);
+    // if flag > 0 then v = 4 else v = 2
+    int v1 = f_many_args(v-2, flag, flag);
+    // flag > 0 --> v = 4 --> v-2>0
+    // v-2>0 --> v>2 --> flag > 0
+    // if v-2>0 then v1 = (flag + 1)*2 else v1 = (flag-1)*2
+    // v-2>0 == flag >0
+    // if flag > 0 then v1 = (flag + 1)*2 else v1 = (flag-1)*2
+    return v1 + v;
+    // if flag > 0 then v+v1 = 4+ (flag + 1)*2 else v+v1 = 2+(flag-1)*2
+}

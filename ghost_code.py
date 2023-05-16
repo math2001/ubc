@@ -18,7 +18,7 @@ import dataclasses
 from enum import Enum, unique
 from typing import Callable, Iterable, Mapping, NamedTuple, Sequence, Tuple, Any, Iterator, Dict
 from typing_extensions import assert_never
-
+from provenance import *
 import abc_cfg
 import source
 import nip
@@ -93,6 +93,7 @@ class Insertion(NamedTuple):
     kind: K
     expr: source.ExprT[source.ProgVarName | nip.GuardVarName]
     node_name: source.NodeName
+    origin: Provenance
 
 
 def no_insertion_on_same_edge(insertions: Sequence[Insertion]) -> bool:
@@ -160,22 +161,22 @@ def apply_insertions(func: nip.Function, insertions: Sequence[Insertion]) -> Map
         def constructor(succ: source.NodeName) -> tuple[source.NodeName, source.Node[source.ProgVarName | nip.GuardVarName]]:
             # the value of kind of class of the node
             if ins.kind is K.POST_CONDITION_PROOF_OBLIGATION:
-                return ins.node_name, NodePostConditionProofObligation(ins.expr, succ_then=succ, succ_else=source.NodeNameErr)
+                return ins.node_name, NodePostConditionProofObligation(ins.origin, ins.expr, succ_then=succ, succ_else=source.NodeNameErr)
 
             if ins.kind is K.PRECONDITION_ASSUMPTION:
-                return ins.node_name, NodePreconditionAssumption(ins.expr, succ)
+                return ins.node_name, NodePreconditionAssumption(ins.origin, ins.expr, succ)
 
             if ins.kind is K.NODE_LOOP_INVARIANT_ASSUMPTION:
-                return ins.node_name, NodeLoopInvariantAssumption(ins.expr, succ)
+                return ins.node_name, NodeLoopInvariantAssumption(ins.origin, ins.expr, succ)
 
             if ins.kind is K.NODE_LOOP_INVARIANT_PROOF_OBLIGATION:
-                return ins.node_name, NodeLoopInvariantProofObligation(ins.expr, succ_then=succ, succ_else=source.NodeNameErr)
+                return ins.node_name, NodeLoopInvariantProofObligation(ins.origin, ins.expr, succ_then=succ, succ_else=source.NodeNameErr)
 
             if ins.kind is K.NODE_PRE_CONDITION_OBLIGATION_FNCALL:
-                return ins.node_name, NodePrecondObligationFnCall(ins.expr, succ)
+                return ins.node_name, NodePrecondObligationFnCall(ins.origin, ins.expr, succ)
 
             if ins.kind is K.NODE_ASSUME_POST_CONDITION_FNCALL:
-                return ins.node_name, NodeAssumePostCondFnCall(ins.expr, succ)
+                return ins.node_name, NodeAssumePostCondFnCall(ins.origin, ins.expr, succ)
 
             assert_never(ins.kind)
 
@@ -194,6 +195,7 @@ def sprinkle_precondition(func: nip.Function) -> Iterable[Insertion]:
     assert isinstance(entry_node, source.NodeEmpty)
 
     yield Insertion(node_name=source.NodeName('pre_condition'),
+                    origin=ProvenanceUnknown(),
                     after=func.cfg.entry,
                     before=entry_node.succ,
                     kind=K.PRECONDITION_ASSUMPTION,
@@ -205,6 +207,7 @@ def sprinkle_postcondition(func: nip.Function) -> Iterable[Insertion]:
                                                               "where the Err node has multiple predecessors")
     pred = func.cfg.all_preds[source.NodeNameRet][0]
     yield Insertion(node_name=source.NodeName('post_condition'),
+                    origin=ProvenanceUnknown(),
                     after=pred,
                     before=source.NodeNameRet,
                     kind=K.POST_CONDITION_PROOF_OBLIGATION,
@@ -232,6 +235,7 @@ def sprinkle_loop_invariant(func: nip.Function, lh: source.LoopHeaderName) -> It
     # ALL predecessors, including predecessors that follow a back edge
     for i, pred in enumerate(func.cfg.all_preds[lh], start=1):
         yield Insertion(node_name=source.NodeName(f'loop_{lh}_latch_{i}'),
+                        origin=ProvenanceUnknown(),
                         after=pred,
                         before=lh,
                         kind=K.NODE_LOOP_INVARIANT_PROOF_OBLIGATION,
@@ -239,6 +243,7 @@ def sprinkle_loop_invariant(func: nip.Function, lh: source.LoopHeaderName) -> It
 
     for i, succ in enumerate(func.cfg.all_succs[lh], start=1):
         yield Insertion(node_name=source.NodeName(f'loop_{lh}_inv_asm_{i}'),
+                        origin=ProvenanceUnknown(),
                         after=lh,
                         before=succ,
                         kind=K.NODE_LOOP_INVARIANT_ASSUMPTION,
@@ -252,11 +257,11 @@ def sprinkle_loop_invariants(func: nip.Function) -> Iterable[Insertion]:
 
 def sprinkle_call_assert_preconditions(fn: nip.Function, name: source.NodeName, precond: source.ExprT[source.ProgVarName | nip.GuardVarName]) -> Iterable[Insertion]:
     for pred in fn.cfg.all_preds[name]:
-        yield Insertion(node_name=source.NodeName(f"prove_{pred}_{name}"), after=pred, before=name, kind=K.NODE_PRE_CONDITION_OBLIGATION_FNCALL, expr=precond)
+        yield Insertion(node_name=source.NodeName(f"prove_{pred}_{name}"), after=pred, before=name, kind=K.NODE_PRE_CONDITION_OBLIGATION_FNCALL, expr=precond, origin=ProvenanceUnknown())
 
 
 def sprinkle_call_assume_postcondition(name: source.NodeName, node: source.NodeCall[Any], postcond: source.ExprT[source.ProgVarName | nip.GuardVarName]) -> Insertion:
-    return Insertion(node_name=source.NodeName(f"assume_postcond_{name}_{node.succ}"), after=name, before=node.succ, kind=K.NODE_ASSUME_POST_CONDITION_FNCALL, expr=postcond)
+    return Insertion(node_name=source.NodeName(f"assume_postcond_{name}_{node.succ}"), after=name, before=node.succ, kind=K.NODE_ASSUME_POST_CONDITION_FNCALL, expr=postcond, origin=ProvenanceUnknown())
 
 
 def unify_preconds(raw_precondition: source.ExprT[source.HumanVarName], args: Tuple[source.ExprT[source.VarNameKind], ...], expected_args: Tuple[source.ExprVarT[source.ProgVarName], ...]) -> Tuple[Dict[source.ExprVarT[source.HumanVarName], source.ExprT[source.VarNameKind]], source.ExprT[source.VarNameKind]]:

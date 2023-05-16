@@ -7,6 +7,7 @@ import nip
 import ghost_code
 from utils import set_union
 from dataclasses import dataclass
+import provenance
 
 
 IncarnationNum = NewType('IncarnationNum', int)
@@ -200,7 +201,8 @@ def apply_insertions(s: DSABuilder) -> None:
                 assert_never(pred)
 
             assert len(updates) > 0, f"{node_insertions=}"
-            join_node = NodeJoiner(tuple(updates), node_name)
+            join_node = NodeJoiner(
+                provenance.ProvenanceDSAJoiner(), tuple(updates), node_name)
             s.dsa_nodes[join_node_name] = join_node
             assert join_node_name not in s.incarnations
 

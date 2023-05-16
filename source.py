@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from enum import Enum, unique
 from typing import Any, Callable, Generic, Iterator, Literal, Mapping, NamedTuple, NewType, Sequence, Set, TypeAlias, TypeVar, Tuple
 from typing_extensions import assert_never
+from provenance import *
 
 import syntax
 
@@ -695,6 +696,11 @@ def condition_to_evaluate_subexpr_in_expr(expr: ExprT[VarNameKind], sub: ExprT[V
 
 
 @dataclass(frozen=True)
+class ABCNode(Generic[VarNameKind]):
+    origin: Provenance
+
+
+@dataclass(frozen=True)
 class Update(Generic[VarNameKind]):
     var: ExprVar[Type, VarNameKind]
     expr: ExprT[VarNameKind]
@@ -706,13 +712,13 @@ class NodeEmpty:
 
 
 @dataclass(frozen=True)
-class NodeBasic(Generic[VarNameKind]):
+class NodeBasic(ABCNode[VarNameKind]):
     upds: tuple[Update[VarNameKind], ...]
     succ: NodeName
 
 
 @dataclass(frozen=True)
-class NodeCall(Generic[VarNameKind]):
+class NodeCall(ABCNode[VarNameKind]):
     succ: NodeName
     fname: str
     args: tuple[ExprT[VarNameKind], ...]
@@ -720,20 +726,20 @@ class NodeCall(Generic[VarNameKind]):
 
 
 @dataclass(frozen=True)
-class NodeCond(Generic[VarNameKind]):
+class NodeCond(ABCNode[VarNameKind]):
     expr: ExprT[VarNameKind]
     succ_then: NodeName
     succ_else: NodeName
 
 
 @dataclass(frozen=True)
-class NodeAssume(Generic[VarNameKind]):
+class NodeAssume(ABCNode[VarNameKind]):
     expr: ExprT[VarNameKind]
     succ: NodeName
 
 
 @dataclass(frozen=True)
-class NodeAssert(Generic[VarNameKind]):
+class NodeAssert(ABCNode[VarNameKind]):
     expr: ExprT[VarNameKind]
     succ: NodeName
 
@@ -973,17 +979,19 @@ def convert_function_nodes(nodes: Mapping[str | int, syntax.Node]) -> Mapping[No
                         var=ExprVarT[ProgVarName](
                             convert_type(var[1]), ProgVarName(var[0])),
                         expr=convert_expr(expr)))
-                safe_nodes[name] = NodeBasic(upds=tuple(
+                safe_nodes[name] = NodeBasic(origin=ProvenanceGraphLang(), upds=tuple(
                     upds), succ=NodeName(str(node.cont)))
         elif node.kind == "Call":
             node.args
             safe_nodes[name] = NodeCall(
+                origin=ProvenanceGraphLang(),
                 succ=NodeName(str(node.cont)),
                 fname=node.fname,
                 args=tuple(convert_expr(arg) for arg in node.args),
                 rets=tuple(ExprVar(convert_type(typ), ProgVarName(name)) for name, typ in node.rets))
         elif node.kind == "Cond":
             safe_nodes[name] = NodeCond(
+                origin=ProvenanceGraphLang(),
                 succ_then=NodeName(str(node.left)), succ_else=NodeName(str(node.right)), expr=convert_expr(node.cond))
         else:
             raise ValueError(f"unknown kind {node.kind!r}")

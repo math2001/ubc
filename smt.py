@@ -2,7 +2,7 @@ from __future__ import annotations
 from enum import Enum
 import subprocess
 from types import NoneType
-from typing import Any, Iterator, Literal, Mapping, NoReturn, Optional, Sequence, TypeAlias
+from typing import Any, Collection, Iterator, Literal, Mapping, NoReturn, Optional, Sequence, TypeAlias
 from typing_extensions import NamedTuple, NewType, assert_never
 
 import textwrap
@@ -314,7 +314,7 @@ def emit_prelude() -> Sequence[Cmd]:
     return prelude
 
 
-def make_smtlib(p: assume_prove.AssumeProveProg, assert_additional_node: Optional[assume_prove.NodeOkName] = None) -> SMTLIB:
+def make_smtlib(p: assume_prove.AssumeProveProg, assert_ok_nodes: Collection[source.NodeName] = []) -> SMTLIB:
     emited_identifiers: set[Identifier] = set()
     emited_variables: set[assume_prove.VarName] = set()
 
@@ -354,18 +354,20 @@ def make_smtlib(p: assume_prove.AssumeProveProg, assert_additional_node: Optiona
         expr = assume_prove.apply_weakest_precondition(script)
         cmds.append(cmd_assert_eq(node_ok_name, expr))
 
+
     cmds.append(CmdCheckSat())
+    if assert_ok_nodes is not None:
+        for ok_node in assert_ok_nodes:
+            # sanity check if this assert_additional_node actually exists
+            node_ok_name = assume_prove.node_ok_name(ok_node)
+            assert node_ok_name in p.nodes_script
+            cmds.append(CmdComment("WARNING: NOT A VALID PROOF RELATED SMT EXPORT This is used for error reporting only"))
+            cmds.append(CmdAssert(source.ExprVar(source.type_bool, node_ok_name)))
+            cmds.append(CmdCheckSat())
+
     cmds.append(CmdAssert(source.expr_negate(
         source.ExprVar(source.type_bool, p.entry))))
-
     cmds.append(CmdCheckSat())
-    if assert_additional_node is not None:
-        # sanity check if this assert_additional_node actually exists
-        assert assert_additional_node in p.nodes_script
-        cmds.append(CmdAssert(source.expr_negate(
-            source.ExprVar(source.type_bool, assert_additional_node))))
-        cmds.append(CmdCheckSat())
-
     # HACK: include sel4cp prelude
     raw_prelude = SMTLIB('(set-logic QF_ABV)')
     # with open('./sel4cp-prelude.smt2') as f:

@@ -14,6 +14,7 @@ in pkgs.mkShell {
     pkgs.pyright
     pkgs.graphviz
     pkgs.z3_4_11
+    pkgs.cvc5
     pkgs.time
   ];
 }

@@ -186,27 +186,80 @@ def extract_and_print_why(func: dsa.Function, reason: FailureReason, node: DSANo
     else:
         assert_never(reason)
 
+# def debug_func_smt(func: dsa.Function) -> Tuple[FailureReason, source.NodeName, source.NodeName]:
+#     """
+#     To enter this function, we make the assumption that verifying func results in SAT. 
+#     This is an assumption. 
+
+#     :param func: Function to debug. 
+#     :result: Returns the reason of failure, node name of the failing assertion, node name of where the bad use is.
+#     """
+
+#     prog = ap.make_prog(func)
+#     prev_node_name: Optional[source.NodeName] = None
+#     for node_name in func.traverse_topologically(skip_err_and_ret=True):
+#         smtlib = smt.make_smtlib(prog, ap.node_ok_name(node_name))
+#         sats = tuple(smt.send_smtlib(smtlib, smt.SolverCVC5()))
+#         if sats[2] == smt.CheckSatResult.UNSAT:
+#             assert prev_node_name is not None
+#             eprint(f"Verification failed at {prev_node_name}")
+#             prev_node = func.nodes[prev_node_name]
+#             reason = determine_reason(prev_node)
+#             print_reason(reason)
+#             use_node_name = extract_and_print_why(func, reason, prev_node)
+#             return (reason, node_name, use_node_name)
+#         prev_node_name = node_name
+#     assert False, "This should never happen"
+
+
+def get_sat(smtlib: smt.SMTLIB) -> smt.CheckSatResult:
+    results = tuple(smt.send_smtlib(smtlib, smt.SolverCVC5()))
+    return results[-1]
+
+
 def debug_func_smt(func: dsa.Function) -> Tuple[FailureReason, source.NodeName, source.NodeName]:
-    """
-    To enter this function, we make the assumption that verifying func results in SAT. 
-    This is an assumption. 
-
-    :param func: Function to debug. 
-    :result: Returns the reason of failure, node name of the failing assertion, node name of where the bad use is.
-    """
-
     prog = ap.make_prog(func)
-    prev_node_name: Optional[source.NodeName] = None
-    for node_name in func.traverse_topologically(skip_err_and_ret=True):
-        smtlib = smt.make_smtlib(prog, ap.node_ok_name(node_name))
-        sats = tuple(smt.send_smtlib(smtlib, smt.SolverCVC5()))
-        if sats[2] == smt.CheckSatResult.UNSAT:
-            assert prev_node_name is not None
-            eprint(f"Verification failed at {prev_node_name}")
-            prev_node = func.nodes[prev_node_name]
-            reason = determine_reason(prev_node)
-            print_reason(reason)
-            use_node_name = extract_and_print_why(func, reason, prev_node)
-            return (reason, node_name, use_node_name)
-        prev_node_name = node_name
-    assert False, "This should never happen"
+    q: set[source.NodeName] = set([func.cfg.entry])
+    not_taken_path: set[source.NodeName] = set([])
+    while len(q) != 0:
+        node_name = q.pop()
+        print(node_name)
+        node = func.nodes[node_name]
+        not_taken_path_and_node = not_taken_path.union(set([node_name]))
+        node_smtlib = smt.make_smtlib(prog, not_taken_path_and_node)
+        node_sat = get_sat(node_smtlib)
+        # we do not care about the Err node
+        successors = list(filter(lambda x: x != source.NodeNameErr, func.cfg.all_succs[node_name]))
+        successors_smtlib = smt.make_smtlib(prog, not_taken_path.union(set(successors)))
+        successors_sat = get_sat(successors_smtlib)
+        if successors_sat == smt.CheckSatResult.SAT and node_sat == smt.CheckSatResult.UNSAT:
+            # This is our error node
+            reason = determine_reason(node)
+            print(reason)
+            used_node_name = extract_and_print_why(func, reason, node)
+            return (reason, node_name, used_node_name)
+
+        if isinstance(node, source.NodeCond) and len(successors) != 1:
+            node1 = successors[0]
+            node2 = successors[1]
+            not_taken_path_and_succ1 = not_taken_path.union(set([node1]))
+            not_taken_path_and_succ2 = not_taken_path.union(set([node2]))
+            succ_node1_smtlib = smt.make_smtlib(prog, not_taken_path_and_succ1)
+            succ_node2_smtlib = smt.make_smtlib(prog, not_taken_path_and_succ2)
+
+
+            succ_node1_sat = get_sat(succ_node1_smtlib)
+            succ_node2_sat = get_sat(succ_node2_smtlib)
+            if succ_node1_sat == smt.CheckSatResult.UNSAT and succ_node2_sat == smt.CheckSatResult.UNSAT:
+                # EDGE case take any path but do not add to not_taken_path
+                q = q.union(set(successors))
+            elif succ_node1_sat == smt.CheckSatResult.UNSAT and succ_node2_sat == smt.CheckSatResult.SAT:
+                q.add(node1)
+                not_taken_path.add(node2)
+            elif succ_node2_sat == smt.CheckSatResult.UNSAT and succ_node1_sat == smt.CheckSatResult.SAT:
+                q.add(node2)
+                not_taken_path.add(node1)
+            else:
+                assert False, "When checking for result of conditional both paths returned SAT, this is not expected"
+        else:
+            q = q.union(set(successors))

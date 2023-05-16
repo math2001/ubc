@@ -68,7 +68,7 @@ def ensure_using_latest_incarnation(func: dsa.Function, path: Collection[source.
                                               nip.GuardVarName], dsa.IncarnationNum] = {}
 
     # TODO: globals
-    for arg in func.signature.arguments:
+    for arg in func.signature.parameters:
         prog_var, inc = dsa.unpack_dsa_var(arg)
         assert prog_var not in latest_incarnations
         latest_incarnations[prog_var] = inc
@@ -89,7 +89,7 @@ def ensure_using_latest_incarnation(func: dsa.Function, path: Collection[source.
 
             prog_var, inc = dsa.unpack_dsa_var(dsa_var)
             if isinstance(func.nodes[n], ghost_code.NodePostConditionProofObligation):
-                if any(prog_var == dsa.unpack_dsa_var(dsa_var)[0] for dsa_var in func.signature.arguments):
+                if any(prog_var == dsa.unpack_dsa_var(dsa_var)[0] for dsa_var in func.signature.parameters):
                     assert inc == entry_incarnations[prog_var], f'{inc} {entry_incarnations[prog_var]}'
                 elif prog_var in latest_incarnations:
                     # FIXME: we shouldn't need this condition here
@@ -240,7 +240,7 @@ def ensure_valid_contexts(func: dsa.Function) -> None:
     new_contexts: dict[source.NodeName, dict[source.ExprVarT[source.ProgVarName |
                                                              nip.GuardVarName], dsa.IncarnationNum]] = {}
     new_contexts[func.cfg.entry] = {dsa.get_base_var(
-        var): dsa.IncarnationBase for var in func.signature.arguments}
+        var): dsa.IncarnationBase for var in func.signature.parameters}
     assert new_contexts[func.cfg.entry] == func.contexts[func.cfg.entry]
 
     for n in func.traverse_topologically(skip_err_and_ret=True):
@@ -269,7 +269,7 @@ def ensure_valid_contexts(func: dsa.Function) -> None:
             assert isinstance(func.nodes[n], source.NodeCond)
             # in the post condition, when referencing function arguments, you
             # use initial incarnations.
-            for dsa_var in func.signature.arguments:
+            for dsa_var in func.signature.parameters:
                 prog_var, inc = dsa.unpack_dsa_var(dsa_var)
                 new_contexts[n][prog_var] = inc
 
@@ -299,7 +299,7 @@ def ensure_valid_variables(func: dsa.Function) -> None:
         if isinstance(expr, source.ExprVar):
             add_or_ensure_same_typ(expr.name, expr.typ)
 
-    for argument in func.signature.arguments:
+    for argument in func.signature.parameters:
         add_or_ensure_same_typ(argument.name, argument.typ)
 
     for n, node in func.nodes.items():

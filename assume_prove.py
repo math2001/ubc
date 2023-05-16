@@ -240,7 +240,7 @@ def make_prog(func: dsa.Function) -> AssumeProveProg:
     for script in nodes_script.values():
         assert all(ins.expr.typ == source.type_bool for ins in script)
 
-    args = tuple(convert_expr_var(arg) for arg in func.signature.arguments)
+    args = tuple(convert_expr_var(arg) for arg in func.signature.parameters)
     return AssumeProveProg(nodes_script=nodes_script, entry=node_ok_name(func.cfg.entry), arguments=args)
 
 

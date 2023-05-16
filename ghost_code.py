@@ -321,7 +321,7 @@ def sprinkle_call_conditions(filename: str, fn: nip.Function, ctx: Dict[str, sou
         call_target = ctx[node.fname]
         assert call_target is not None
         conversion_map, precondition = unify_preconds(
-            raw_precondition, node.args, call_target.arguments)
+            raw_precondition, node.args, call_target.parameters)
         postcondition = unify_postconds(
             raw_postcondition, node.rets, call_target.returns, conversion_map)
         yield from sprinkle_call_assert_preconditions(fn, name, precondition)

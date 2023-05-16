@@ -874,7 +874,7 @@ class GhostlessFunction(Generic[VarNameKind, VarNameKind2]):
 
     def all_variables(self) -> Set[ExprVarT[VarNameKind]]:
         all_vars: set[ExprVarT[VarNameKind]] = set()
-        all_vars.update(self.signature.arguments)
+        all_vars.update(self.signature.parameters)
         for n, node in self.nodes.items():
             all_vars.update(used_variables_in_node(node))
             all_vars.update(assigned_variables_in_node(
@@ -992,7 +992,7 @@ def convert_function_nodes(nodes: Mapping[str | int, syntax.Node]) -> Mapping[No
 
 @dataclass(frozen=True)
 class FunctionSignature(Generic[VarNameKind]):
-    arguments: Tuple[ExprVarT[VarNameKind], ...]
+    parameters: Tuple[ExprVarT[VarNameKind], ...]
     returns: Tuple[ExprVarT[ProgVarName], ...]
 
 

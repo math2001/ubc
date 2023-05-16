@@ -173,7 +173,7 @@ def viz_function(file: IOBase, fun: source.GenericFunction[Any, Any]) -> None:
     puts("  node[shape=box]")
     puts("  graph[ranksep=0.3]")
     args = ', '.join(pretty_name(arg.name)
-                     for arg in fun.signature.arguments)
+                     for arg in fun.signature.parameters)
     rets = ', '.join(pretty_name(ret.name)
                      for ret in fun.signature.returns)
     font = '[fontname=monospace; fontsize="10px"]'

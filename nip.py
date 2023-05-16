@@ -92,10 +92,10 @@ def make_protection_for_node(node: source.Node[source.ProgVarName]) -> source.Ex
 
 def make_initial_state(func: source.Function) -> Iterator[source.Update[GuardVarName]]:
     # TODO: globals
-    for arg in func.signature.arguments:
+    for arg in func.signature.parameters:
         yield source.Update(guard_var(arg), source.expr_true)
 
-    for other in func.all_variables() - set(func.signature.arguments):
+    for other in func.all_variables() - set(func.signature.parameters):
         yield source.Update(guard_var(other), source.expr_false)
 
 

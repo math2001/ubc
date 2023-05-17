@@ -7,13 +7,17 @@ import source
 import smt
 from provenance import *
 import nip
+import subprocess
+import textwrap
+from dot_graph import pretty_expr, pretty_safe_expr, pretty_safe_update
+import smt_parser
 
 # REVIEW: @mathieup do you reckon this should go in dsa.py. I am sick of having to type these all out completely.
 DSANode = source.Node[dsa.Incarnation[source.ProgVarName | nip.GuardVarName]]
 DSAExprT = source.ExprT[dsa.Incarnation[source.ProgVarName | nip.GuardVarName]]
 
 
-def eprint(*args, **kwargs) -> None:
+def eprint(*args, **kwargs) -> None: # type: ignore
     print(*args, file=sys.stderr, **kwargs)
 
 class OverflowFailure(NamedTuple):
@@ -72,11 +76,12 @@ def expr_all_subtract(e: DSAExprT) -> bool:
     return check_ops(e, allowed_ops)
 
 def expr_all_pointeralignops(e: DSAExprT) -> bool:
+    # TODO: When we handle memory
     return False
 
 
 def expr_all_pointervalidops(e: DSAExprT) -> bool:
-    #TODO: When we emit PValid
+    #TODO: When we handle memory
     return False
 
 def determine_reason(node: DSANode) -> FailureReason:
@@ -136,7 +141,7 @@ def human_var(src: source.ExprVarT[dsa.Incarnation[source.ProgVarName | nip.Guar
     return human_varname[0]
 
 
-def extract_and_print_why(func: dsa.Function, reason: FailureReason, node: DSANode) -> source.NodeName:
+def extract_and_print_why(func: dsa.Function, reason: FailureReason, node: DSANode) -> Optional[source.NodeName]:
     """Prints debug information for the user and returns the NodeName in which a use caused an assertion to fail
 
     :param func: Function we are error reporting on, needed for context information. 
@@ -186,38 +191,54 @@ def extract_and_print_why(func: dsa.Function, reason: FailureReason, node: DSANo
     else:
         assert_never(reason)
 
-# def debug_func_smt(func: dsa.Function) -> Tuple[FailureReason, source.NodeName, source.NodeName]:
-#     """
-#     To enter this function, we make the assumption that verifying func results in SAT. 
-#     This is an assumption. 
-
-#     :param func: Function to debug. 
-#     :result: Returns the reason of failure, node name of the failing assertion, node name of where the bad use is.
-#     """
-
-#     prog = ap.make_prog(func)
-#     prev_node_name: Optional[source.NodeName] = None
-#     for node_name in func.traverse_topologically(skip_err_and_ret=True):
-#         smtlib = smt.make_smtlib(prog, ap.node_ok_name(node_name))
-#         sats = tuple(smt.send_smtlib(smtlib, smt.SolverCVC5()))
-#         if sats[2] == smt.CheckSatResult.UNSAT:
-#             assert prev_node_name is not None
-#             eprint(f"Verification failed at {prev_node_name}")
-#             prev_node = func.nodes[prev_node_name]
-#             reason = determine_reason(prev_node)
-#             print_reason(reason)
-#             use_node_name = extract_and_print_why(func, reason, prev_node)
-#             return (reason, node_name, use_node_name)
-#         prev_node_name = node_name
-#     assert False, "This should never happen"
-
-
 def get_sat(smtlib: smt.SMTLIB) -> smt.CheckSatResult:
     results = tuple(smt.send_smtlib(smtlib, smt.SolverCVC5()))
     return results[-1]
 
 
-def debug_func_smt(func: dsa.Function) -> Tuple[FailureReason, source.NodeName, source.NodeName]:
+def pretty_node(node: DSANode) -> str:
+    """ This isn't great in a way, it doesn't print the proper graphlang name it uses the dot format for dsa names"""
+    if isinstance(node, source.NodeBasic):
+        return "\n".join(pretty_safe_update(u) for u in node.upds)
+    elif isinstance(node, source.NodeCond):
+        return pretty_safe_expr(node.expr)
+    elif isinstance(node, source.NodeCall):
+        formatted_rets = ', '.join(pretty_safe_expr(ret) for ret in node.rets)
+        args = ', '.join(pretty_safe_expr(arg) for arg in node.args)
+        return f"{formatted_rets} = {node.fname}({args})"
+    elif isinstance(node, source.NodeAssume):
+        assert False, "We should never see a NodeAssume being the reason a SAT was returned"
+    elif isinstance(node, source.NodeAssert):
+        return pretty_safe_expr(node.expr)
+    elif isinstance(node, source.NodeEmpty):
+        assert False, "We should never see a NodeEmpty being the reason a SAT was returned"
+    else:
+        assert_never(node)
+
+def send_smtlib_model(smtlib: smt.SMTLIB, solver_type: smt.SolverType) -> smt.Responses:
+    """Send command to any smt solver and returns a boolean per (check-sat)
+    """
+
+    with smt.open_temp_file(suffix='.smt2') as (f, fullpath):
+        f.write(smtlib)
+        f.close()
+        p = subprocess.Popen(smt.get_subprocess_file(
+            solver_type, fullpath), stderr=subprocess.PIPE, stdout=subprocess.PIPE)
+        p.wait()
+    assert p.stderr is not None
+    assert p.stdout is not None
+    if p.returncode != 0:
+        print("stderr:")
+        print(textwrap.indent(p.stdout.read().decode('utf-8'), '   '))
+        sys.exit(1)
+    lines = p.stdout.read().decode('utf-8')
+    print(lines)
+    f = smt_parser.parse_responses()
+    res = f(lines)
+    print(res)
+    exit(1)
+
+def debug_func_smt(func: dsa.Function) -> Tuple[FailureReason, source.NodeName, Optional[source.NodeName]]:
     prog = ap.make_prog(func)
     q: set[source.NodeName] = set([func.cfg.entry])
     not_taken_path: set[source.NodeName] = set([])
@@ -233,12 +254,22 @@ def debug_func_smt(func: dsa.Function) -> Tuple[FailureReason, source.NodeName, 
         successors_smtlib = smt.make_smtlib(prog, not_taken_path.union(set(successors)))
         successors_sat = get_sat(successors_smtlib)
         if successors_sat == smt.CheckSatResult.SAT and node_sat == smt.CheckSatResult.UNSAT:
-            # This is our error node
+            # This is our error node  
+            succ_smtlib_with_model = smt.make_smtlib(prog, not_taken_path.union(set(successors)), with_model=True)
+            succ_model = tuple(send_smtlib_model(succ_smtlib_with_model, smt.SolverZ3()))
+            print(succ_model)
             reason = determine_reason(node)
-            print(reason)
+            print_reason(reason)
+            
+            # used_node_name is optional because could not determine the reason
             used_node_name = extract_and_print_why(func, reason, node)
+            if used_node_name != None:
+                used_node = func.nodes[used_node_name]
+                print(pretty_node(used_node))
             return (reason, node_name, used_node_name)
-
+        
+        # When len(successors) == 1 and it is a NodeCond, it is because the succ_else path to NodeNameErr was trimmed
+        # This is handled above, so we skip it. 
         if isinstance(node, source.NodeCond) and len(successors) != 1:
             node1 = successors[0]
             node2 = successors[1]
@@ -263,3 +294,4 @@ def debug_func_smt(func: dsa.Function) -> Tuple[FailureReason, source.NodeName, 
                 assert False, "When checking for result of conditional both paths returned SAT, this is not expected"
         else:
             q = q.union(set(successors))
+    assert False, "This was reached because we failed to diagnose an error - either this function succeeds or some edge case is missing for error handling"

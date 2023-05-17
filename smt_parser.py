@@ -129,6 +129,47 @@ def parse_cmd_declare_fun() -> pc.Parser[smt.CmdDeclareFun]:
     return fn
 
 
+
+def parse_cmd_define_fun() -> pc.Parser[smt.CmdDefineFun]:
+    def fn(s: str) -> pc.ParseResult[smt.CmdDefineFun]:
+        maybeStart = pc.compose(
+            ws(pc.char('(')), ws(pc.string("define-fun")))(s)
+        if isinstance(maybeStart, pc.ParseError):
+            return maybeStart
+        (_, s) = maybeStart
+
+        maybeIdent = parse_identifier()(s)
+        if isinstance(maybeIdent, pc.ParseError):
+            return maybeIdent
+        (ident, s) = maybeIdent
+        maybeArgs = pc.array(
+            ws(pc.char('(')),
+            parse_type(),
+            ws(pc.char(')')),
+            pc.many1(pc.choice([
+                pc.space(),
+                pc.tab(),
+                pc.carriage_return(),
+                pc.newline()
+            ]))
+        )(s)
+        
+        if isinstance(maybeArgs, pc.ParseError):
+            return maybeArgs
+        (args, s) = maybeArgs
+
+        maybeRetSort = parse_type()(s)
+        if isinstance(maybeRetSort, pc.ParseError):
+            return maybeRetSort
+        (ret_sort, s) = maybeRetSort
+
+        maybeTerm: pc.ParseError | tp.Tuple[str, str] = NotImplemented
+        if isinstance(maybeTerm, pc.ParseError):
+            return maybeTerm
+
+        (term, s) = maybeTerm
+
+
 def inner_expr() -> pc.Parser[source.ExprT[assume_prove.VarName]]:
     return NotImplemented
 

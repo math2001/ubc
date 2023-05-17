@@ -50,10 +50,5 @@ dsa_functions = get_func_from_txt()
 expected_results = generate_param_test_from_json()
 print(expected_results)
 @pytest.mark.parametrize("fname", dsa_functions.keys())
-def test_function(fname: str):
-    func = dsa_functions
-
-
-
-    
-     
+def test_function(fname: str) -> None:
+    func = dsa_functions     

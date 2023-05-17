@@ -1,6 +1,7 @@
 from __future__ import annotations
 from enum import Enum
 import subprocess
+from sys import exc_info
 from types import NoneType
 from typing import Any, Collection, Iterator, Literal, Mapping, NoReturn, Optional, Sequence, TypeAlias
 from typing_extensions import NamedTuple, NewType, assert_never
@@ -97,8 +98,6 @@ class CmdAssert(NamedTuple):
 
 class CmdCheckSat(NamedTuple):
     pass
-
-
 class CmdDefineFun(NamedTuple):
     symbol: Identifier
     args: Sequence[source.ExprVarT[assume_prove.VarName]]
@@ -114,10 +113,13 @@ class CmdDeclareSort(NamedTuple):
 class CmdComment(NamedTuple):
     comment: str
 
+class CmdGetModel(NamedTuple):
+    pass
+
 
 EmptyLine = CmdComment('')
 
-Cmd = CmdDeclareFun | CmdDefineFun | CmdAssert | CmdCheckSat | CmdComment | CmdSetLogic | CmdDeclareSort
+Cmd = CmdDeclareFun | CmdDefineFun | CmdAssert | CmdCheckSat | CmdComment | CmdSetLogic | CmdDeclareSort | CmdGetModel
 
 
 ModelResponse: TypeAlias = CmdDefineFun
@@ -296,6 +298,8 @@ def emit_cmd(cmd: Cmd) -> SMTLIB:
         return SMTLIB(f'(set-logic {cmd.logic.value})')
     elif isinstance(cmd, CmdDeclareSort):
         return SMTLIB(f"(declare-sort {cmd.symbol} {cmd.arity})")
+    elif isinstance(cmd, CmdGetModel):
+        return SMTLIB(f"(get-model)")
     assert_never(cmd)
 
 
@@ -314,7 +318,7 @@ def emit_prelude() -> Sequence[Cmd]:
     return prelude
 
 
-def make_smtlib(p: assume_prove.AssumeProveProg, assert_ok_nodes: Collection[source.NodeName] = []) -> SMTLIB:
+def make_smtlib(p: assume_prove.AssumeProveProg, assert_ok_nodes: Collection[source.NodeName] = [], with_model: bool = False) -> SMTLIB:
     emited_identifiers: set[Identifier] = set()
     emited_variables: set[assume_prove.VarName] = set()
 
@@ -368,6 +372,9 @@ def make_smtlib(p: assume_prove.AssumeProveProg, assert_ok_nodes: Collection[sou
     cmds.append(CmdAssert(source.expr_negate(
         source.ExprVar(source.type_bool, p.entry))))
     cmds.append(CmdCheckSat())
+
+    if with_model:
+        cmds.append(CmdGetModel())
     # HACK: include sel4cp prelude
     raw_prelude = SMTLIB('(set-logic QF_ABV)')
     # with open('./sel4cp-prelude.smt2') as f:
@@ -398,7 +405,7 @@ def get_subprocess_file(solver_type: SolverType, filepath: str) -> Sequence[str]
     if isinstance(solver_type, SolverZ3):
         return ["z3", "-file:"+filepath]
     elif isinstance(solver_type, SolverCVC5):
-        return ["cvc5", "--incremental", filepath]
+        return ["cvc5", "--incremental", "--produce-models", filepath]
     else:
         assert_never(solver_type)
 

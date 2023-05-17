@@ -255,6 +255,13 @@ def test_parse_model() -> None:
         assert out == expected
 
 
+def test_complex() -> None:
+    fn = smt_parser.parse_responses()
+    with open("./tests/smt/pass/complex.smt", "r") as f:
+        data = f.read()
+        maybeModels = pc.parse(fn, data)
+        assert not isinstance(maybeModels, pc.ParseError)
+
 def test_should_parse_files() -> None:
     fn = smt_parser.parse_responses()
     for file in glob.glob("./tests/smt/pass/*.smt"):
@@ -262,3 +269,5 @@ def test_should_parse_files() -> None:
             data = f.read()
             maybeModels = pc.parse(fn, data)
             assert not isinstance(maybeModels, pc.ParseError)
+            responses, leftover = maybeModels
+            assert leftover.strip() == ""

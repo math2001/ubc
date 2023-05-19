@@ -3,9 +3,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum, unique
 from typing import Any, Callable, Generic, Iterator, Literal, Mapping, NamedTuple, NewType, Sequence, Set, TypeAlias, TypeVar, Tuple
+import typing
 from typing_extensions import assert_never
 
 import syntax
+
+if typing.TYPE_CHECKING:
+    import nip
 
 
 class ProgVarName(str):
@@ -36,6 +40,14 @@ class HumanVarName(NamedTuple):
     """ for example foo """
     use_guard: bool
     """ if set to true, this will evaluate to foo#assigned """
+
+
+class CRetSpecialVar(ProgVarName):
+    field_num: int
+    """
+    When a function returns a composite type (structs or arrays) it returns
+    multiple scalar values, instead of a composite object.
+    """
 
 
 # expressions are immutable containers, so they are covariant in their generic
@@ -881,7 +893,7 @@ class GhostlessFunction(Generic[VarNameKind, VarNameKind2]):
                 self, n, with_loop_targets=True))
         return all_vars
 
-    def with_ghost(self, ghost: Ghost[HumanVarName] | None) -> GenericFunction[VarNameKind, HumanVarName]:
+    def with_ghost(self, ghost: Ghost[ProgVarName | nip.GuardVarName] | None) -> GenericFunction[VarNameKind, ProgVarName | nip.GuardVarName]:
         if ghost is None:
             ghost = Ghost(precondition=expr_true,
                           postcondition=expr_true,
@@ -904,7 +916,7 @@ class GenericFunction(GhostlessFunction[VarNameKind, VarNameKind2]):
     ghost: Ghost[VarNameKind2]
 
 
-Function = GenericFunction[ProgVarName, HumanVarName]
+Function: TypeAlias = 'GenericFunction[ProgVarName, ProgVarName | nip.GuardVarName]'
 
 
 def is_loop_counter_name(var: str) -> bool:

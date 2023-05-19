@@ -471,3 +471,44 @@ int call_many_args(int flag)
     return v1 + v;
     // if flag > 0 then v+v1 = 4+ (flag + 1)*2 else v+v1 = 2+(flag-1)*2
 }
+
+int call_many_args_once(int x, int y)
+{
+    return f_many_args(0, x, y); // returns (y-1)*2
+}
+
+int types()
+{
+    int a = 1;
+    unsigned int b = 2;
+    long c = 3;
+    return a + b + c;
+}
+
+
+struct point { int x; int y; };
+
+struct point mk_point()
+{
+    struct point p;
+    p.x = 1;
+    p.y = 2;
+    return p;
+}
+
+struct point get_point()
+{
+    struct point p = mk_point();
+    p.x = -1;
+    return p;
+}
+
+void ghost_add_1__fail()
+{
+    return;
+}
+
+void ghost_add_3()
+{
+    return;
+}

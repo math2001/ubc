@@ -364,8 +364,8 @@ def dsa(func: ghost_code.Function) -> Function:
             # result in some very weird behavior. This doesn't matter because
             # the post condition proof obligation is right at the bottom of
             # the function. So to be safe, we validate those assumptions
-            assert node.succ_then == source.NodeNameRet
-            assert node.succ_else == source.NodeNameErr
+            assert node.succ_then == source.NodeNameRet, node.succ_then
+            assert node.succ_else == source.NodeNameErr, node.succ_else
 
             # in the post condition, when you mention a function argument, you
             # mean its value at the start of the function.

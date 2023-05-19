@@ -1,22 +1,8 @@
-"""
-unify_var(h: HumanVar): ProgVar
-
-
-insert_precondition(p: Expr[HumanVarName])
-    after the entry node, insert PreconditionAssumption
-insert_postcondition()
-    before the ret node, insert a PostConditionProofObligation
-insert_loop_invariant()
-    for every lh := loop header
-        for every p := pred(lh)
-            insert NodeLoopInvariantProofObligation between p-lh
-        insert NodeLoopInvariantAssumption
-"""
-
+from __future__ import annotations
 from dataclasses import dataclass
 import dataclasses
 from enum import Enum, unique
-from typing import Callable, Iterable, Mapping, NamedTuple, Sequence, Tuple, Any, Iterator, Dict
+from typing import Callable, Iterable, Mapping, NamedTuple, Sequence, Tuple, Any, Iterator, Dict, TypeAlias
 from typing_extensions import assert_never
 
 import abc_cfg
@@ -75,140 +61,168 @@ Function = GenericFunction[source.ProgVarName |
                            nip.GuardVarName, source.ProgVarName | nip.GuardVarName]
 
 
-@unique
-class K(Enum):
-    """ Only used in this module, hence the short name """
-
-    POST_CONDITION_PROOF_OBLIGATION = NodePostConditionProofObligation
-    PRECONDITION_ASSUMPTION = NodePreconditionAssumption
-    NODE_LOOP_INVARIANT_ASSUMPTION = NodeLoopInvariantAssumption
-    NODE_LOOP_INVARIANT_PROOF_OBLIGATION = NodeLoopInvariantProofObligation
-    NODE_PRE_CONDITION_OBLIGATION_FNCALL = NodePrecondObligationFnCall
-    NODE_ASSUME_POST_CONDITION_FNCALL = NodeAssumePostCondFnCall
-
-
 class Insertion(NamedTuple):
     after: source.NodeName
     before: source.NodeName
-    kind: K
-    expr: source.ExprT[source.ProgVarName | nip.GuardVarName]
+
     node_name: source.NodeName
+    mk_node: Callable[[source.NodeName],
+                      source.Node[source.ProgVarName | nip.GuardVarName]]
 
 
-def no_insertion_on_same_edge(insertions: Sequence[Insertion]) -> bool:
-    edges = tuple((ins.after, ins.before) for ins in insertions)
-    return len(edges) == len(set(edges))
-
-
-def insert_single_succ_node_on_edge(
-        nodes: dict[source.NodeName, source.Node[source.ProgVarName | nip.GuardVarName]],
-        after_name: source.NodeName,
-        before_name: source.NodeName,
-        constructor: Callable[[source.NodeName], tuple[source.NodeName, source.Node[source.ProgVarName | nip.GuardVarName]]]) -> None:
-    """
-    constructor :: NodeName -> (NodeName, Node)
-    constructor "name of new node successor" -> (name of new node, new node)
-
-    modifies 'nodes' in place
-    """
-
-    # after  ----->   new node  ----->  before
-    #        ^                  ^ edge 2
-    #        | edge 1
-
-    assert after_name in nodes, f'inserting after imaginary node'
-    assert before_name in nodes or before_name in (
-        source.NodeNameErr, source.NodeNameRet), f'inserting before imaginary node'
-
-    # make the node and edge 2 at the same time
-    new_node_name, new_node = constructor(before_name)
-    assert new_node_name not in nodes, f'new node name is already taken {new_node_name}'
-    nodes[new_node_name] = new_node
-
-    # make edge 1
-    after = nodes[after_name]
-    if isinstance(after, source.NodeEmpty | source.NodeAssume | source.NodeBasic | source.NodeCall | source.NodeAssert):
-        # just for type safety (dataclasses.replace isn't type checked)
-        after.succ
-        nodes[after_name] = dataclasses.replace(after, succ=new_node_name)
-    elif isinstance(after, source.NodeCond):
-        if after.succ_then == before_name:
-            nodes[after_name] = dataclasses.replace(
-                after, succ_then=new_node_name)
-        elif after.succ_else == before_name:
-            nodes[after_name] = dataclasses.replace(
-                after, succ_else=new_node_name)
-        else:
-            assert False, "that must mean that the edge isn't valid"
-    else:
-        assert_never(after)
+Edge: TypeAlias = tuple[source.NodeName, source.NodeName]
 
 
 def apply_insertions(func: nip.Function, insertions: Sequence[Insertion]) -> Mapping[source.NodeName, source.Node[source.ProgVarName | nip.GuardVarName]]:
+    # edge -> list of insertion to apply on that edge, _in order_ (first is
+    # inserted first, etc)
 
-    # Inserting multiple nodes on the same edge ie.
-    #
-    #   [insert (after=a, before=b, ...), insert(after=a, before=b, ...), ...]
-    #
-    # makes the graph modification a little bit more complicated. From my
-    # observations, it seems like it can never occur.
-    assert no_insertion_on_same_edge(
-        insertions), ("not to worry, just need to handle inserting multiple nodes on the same edge. "
-                      "Pay close attention of the intended order of the inserted nodes")
+    edge_insertions: dict[Edge, list[Insertion]] = {}
+    for insertion in insertions:
+        edge = (insertion.after, insertion.before)
+        if edge not in edge_insertions:
+            edge_insertions[edge] = []
+        edge_insertions[edge].append(insertion)
 
-    def make_constructor(ins: Insertion) -> Callable[[source.NodeName], tuple[source.NodeName, source.Node[source.ProgVarName | nip.GuardVarName]]]:
-        def constructor(succ: source.NodeName) -> tuple[source.NodeName, source.Node[source.ProgVarName | nip.GuardVarName]]:
-            # the value of kind of class of the node
-            if ins.kind is K.POST_CONDITION_PROOF_OBLIGATION:
-                return ins.node_name, NodePostConditionProofObligation(ins.expr, succ_then=succ, succ_else=source.NodeNameErr)
+    new_nodes: dict[source.NodeName,
+                    source.Node[source.ProgVarName | nip.GuardVarName]] = {}
+    for after_name, node in func.nodes.items():
 
-            if ins.kind is K.PRECONDITION_ASSUMPTION:
-                return ins.node_name, NodePreconditionAssumption(ins.expr, succ)
+        # construct (and add to the node map) all the insertion nodes
+        #   - first one isn't connected
+        #   - last one jumps to after_name's successor
+        # case split on the type of after_name to connect the first one
+        #   - dataclass._replace(...)
 
-            if ins.kind is K.NODE_LOOP_INVARIANT_ASSUMPTION:
-                return ins.node_name, NodeLoopInvariantAssumption(ins.expr, succ)
+        new_nodes[after_name] = node
 
-            if ins.kind is K.NODE_LOOP_INVARIANT_PROOF_OBLIGATION:
-                return ins.node_name, NodeLoopInvariantProofObligation(ins.expr, succ_then=succ, succ_else=source.NodeNameErr)
+        for before_name in func.cfg.all_succs[after_name]:
+            edge = (after_name, before_name)
+            if edge not in edge_insertions:
+                continue
+            assert len(edge_insertions[edge]) > 0
 
-            if ins.kind is K.NODE_PRE_CONDITION_OBLIGATION_FNCALL:
-                return ins.node_name, NodePrecondObligationFnCall(ins.expr, succ)
+            for i, insertion in enumerate(edge_insertions[edge]):
+                assert insertion.node_name not in new_nodes, f"trying to insert a new node, but the name ({insertion.node_name}) is already taken"
+                if i == len(edge_insertions[edge]) - 1:
+                    insertion_succ = before_name
+                else:
+                    insertion_succ = edge_insertions[edge][i+1].node_name
+                new_nodes[insertion.node_name] = insertion.mk_node(
+                    insertion_succ)
 
-            if ins.kind is K.NODE_ASSUME_POST_CONDITION_FNCALL:
-                return ins.node_name, NodeAssumePostCondFnCall(ins.expr, succ)
-
-            assert_never(ins.kind)
-
-        return constructor
-
-    new_nodes = dict(func.nodes)
-    for ins in insertions:
-        insert_single_succ_node_on_edge(
-            new_nodes, ins.after, ins.before, make_constructor(ins))
+            first_inserted_node_name: source.NodeName = edge_insertions[edge][0].node_name
+            # connect node_name to the first insertion node
+            if isinstance(node, source.NodeBasic | source.NodeCall | source.NodeEmpty | source.NodeAssume | source.NodeAssert):
+                new_nodes[after_name] = dataclasses.replace(new_nodes[after_name],
+                                                            succ=first_inserted_node_name)
+            elif isinstance(node, source.NodeCond):
+                # notice how we replace from new_nodes[after_name], not node
+                # this important, because it can be updated multiple times
+                # (consider what happens when inserting on both the left and
+                # right branch of conditional node)
+                if node.succ_then == before_name:
+                    new_nodes[after_name] = dataclasses.replace(new_nodes[after_name],
+                                                                succ_then=first_inserted_node_name)
+                elif node.succ_else == before_name:
+                    new_nodes[after_name] = dataclasses.replace(new_nodes[after_name],
+                                                                succ_else=first_inserted_node_name)
+            else:
+                assert_never(node)
 
     return new_nodes
 
 
-def sprinkle_precondition(func: nip.Function) -> Iterable[Insertion]:
+class GhostVarName(source.ProgVarName):
+    pass
+
+# a variable that ends with /subject-arg
+
+
+class SubjectArgVarName(GhostVarName):
+    pass
+
+# a variable that ends with /subject-arg
+
+
+class CallArgVarName(GhostVarName):
+    pass
+
+
+def subject_arg_var_name(arg: source.ExprVarT[source.ProgVarName | nip.GuardVarName]) -> source.ExprVarT[GhostVarName]:
+    assert arg.name.endswith('/arg'), f"{arg.name!r}"
+    return source.ExprVar(arg.typ, SubjectArgVarName(arg.name[:-len('/arg')] + "/subject-arg"))
+
+
+def call_arg_var_name(arg: source.ExprVarT[source.ProgVarName | nip.GuardVarName]) -> source.ExprVarT[GhostVarName]:
+    assert arg.name.endswith('/arg'), f"{arg.name!r}"
+    return source.ExprVar(arg.typ, CallArgVarName(arg.name[:-len('/arg')] + "/call-arg"))
+
+
+@unique
+class Mode(Enum):
+    subject = "subject"
+    call = "call"
+
+
+NUM_GHOST_VARIABLES_CPARSER_FUNCTION_CALL = 4  # mem, htd, pms, ghost assertions
+
+
+def sprinkle_subject_pre_and_post_conditions(func: nip.Function) -> Iterable[Insertion]:
+    """
+    We assume the precondition holds, stash the initial values with the
+    suffix /subject-arg of all the arguments, and then assert that the post
+    condition holds at the bottom of the function, replacing the variables
+    with suffix /arg (refering to their old value) with the
+    suffix /subject-arg(ie. the stashed variables).
+    """
     entry_node = func.nodes[func.cfg.entry]
     assert isinstance(entry_node, source.NodeEmpty)
 
-    yield Insertion(node_name=source.NodeName('pre_condition'),
-                    after=func.cfg.entry,
+    # a1/subject-arg = a1; a2/subject-arg = a2, ... (for all arguments)
+    stash_updates = tuple(source.Update(source.ExprVar(param.typ, SubjectArgVarName(param.name + '/subject-arg')), param)
+                          for param in func.signature.parameters)
+
+    yield Insertion(after=func.cfg.entry,
                     before=entry_node.succ,
-                    kind=K.PRECONDITION_ASSUMPTION,
-                    expr=func.ghost.precondition)
+                    node_name=source.NodeName('stash_initial_args'),
+                    mk_node=lambda succ: source.NodeBasic(stash_updates, succ))
 
+    def f(var: source.ExprVarT[source.ProgVarName | nip.GuardVarName]) -> source.ExprVarT[source.ProgVarName | nip.GuardVarName]:
+        # this will change with the new way of writting specs
+        if not var.name.endswith('/arg'):
+            assert False, f"unknown variable {var.name}"
 
-def sprinkle_postcondition(func: nip.Function) -> Iterable[Insertion]:
+        return subject_arg_var_name(var)
+
+    precondition = source.convert_expr_vars(f, func.ghost.precondition)
+
+    yield Insertion(after=func.cfg.entry,
+                    before=entry_node.succ,
+                    node_name=source.NodeName('pre_condition'),
+                    mk_node=lambda succ: NodePreconditionAssumption(precondition, succ))
+
+    def g(var: source.ExprVarT[source.ProgVarName | nip.GuardVarName]) -> source.ExprVarT[source.ProgVarName | nip.GuardVarName]:
+        # this will be cleaned up when we implement the new way of writting specs
+        if isinstance(var.name, source.CRetSpecialVar):
+            assert 0 <= var.name.field_num and var.name.field_num <= len(
+                func.signature.returns) - NUM_GHOST_VARIABLES_CPARSER_FUNCTION_CALL
+            return func.signature.returns[var.name.field_num]
+        elif var.name.endswith("/arg"):
+            return subject_arg_var_name(var)
+        return var
+
+    converted_post_condition = source.convert_expr_vars(
+        g, func.ghost.postcondition)
+
     assert len(func.cfg.all_preds[source.NodeNameRet]) == 1, ("not to worry, just need to handle the case "
-                                                              "where the Err node has multiple predecessors")
+                                                              "where the Ret node has multiple predecessors")
+
     pred = func.cfg.all_preds[source.NodeNameRet][0]
-    yield Insertion(node_name=source.NodeName('post_condition'),
-                    after=pred,
+    yield Insertion(after=pred,
                     before=source.NodeNameRet,
-                    kind=K.POST_CONDITION_PROOF_OBLIGATION,
-                    expr=func.ghost.postcondition)
+                    node_name=source.NodeName('post_condition'),
+                    mk_node=lambda succ: NodePostConditionProofObligation(converted_post_condition, succ, source.NodeNameErr))
 
 
 def sprinkle_loop_invariant(func: nip.Function, lh: source.LoopHeaderName) -> Iterable[Insertion]:
@@ -228,118 +242,142 @@ def sprinkle_loop_invariant(func: nip.Function, lh: source.LoopHeaderName) -> It
     # If a variable isn't a loop target, the incarnation number to use is the
     # one that occurs in the loop header's DSA context (ie. the only incarnation
     # for that variable throughout the loop)
+    #
+    # UPDATE: this will be fixed when we switch to the new way of writing
+    # specs
 
     # ALL predecessors, including predecessors that follow a back edge
     for i, pred in enumerate(func.cfg.all_preds[lh], start=1):
-        yield Insertion(node_name=source.NodeName(f'loop_{lh}_latch_{i}'),
-                        after=pred,
+        yield Insertion(after=pred,
                         before=lh,
-                        kind=K.NODE_LOOP_INVARIANT_PROOF_OBLIGATION,
-                        expr=func.ghost.loop_invariants[lh])
+                        node_name=source.NodeName(f'loop_{lh}_latch_{i}'),
+                        mk_node=lambda succ: NodeLoopInvariantProofObligation(func.ghost.loop_invariants[lh],
+                                                                              succ,
+                                                                              source.NodeNameErr))
 
-    for i, succ in enumerate(func.cfg.all_succs[lh], start=1):
-        yield Insertion(node_name=source.NodeName(f'loop_{lh}_inv_asm_{i}'),
-                        after=lh,
-                        before=succ,
-                        kind=K.NODE_LOOP_INVARIANT_ASSUMPTION,
-                        expr=func.ghost.loop_invariants[lh])
+    for i, nsucc in enumerate(func.cfg.all_succs[lh], start=1):
+        yield Insertion(after=lh,
+                        before=nsucc,
+                        node_name=source.NodeName(f'loop_{lh}_inv_asm_{i}'),
+                        mk_node=lambda succ: NodeLoopInvariantAssumption(func.ghost.loop_invariants[lh],
+                                                                         succ))
 
 
 def sprinkle_loop_invariants(func: nip.Function) -> Iterable[Insertion]:
     for loop_header in func.loops:
         yield from sprinkle_loop_invariant(func, loop_header)
 
-
-def sprinkle_call_assert_preconditions(fn: nip.Function, name: source.NodeName, precond: source.ExprT[source.ProgVarName | nip.GuardVarName]) -> Iterable[Insertion]:
-    for pred in fn.cfg.all_preds[name]:
-        yield Insertion(node_name=source.NodeName(f"prove_{pred}_{name}"), after=pred, before=name, kind=K.NODE_PRE_CONDITION_OBLIGATION_FNCALL, expr=precond)
+# def sprinkle_function_call_pre_and_post_condition(func: nip.Function, node_name: source.NodeName) -> Iterable[Insertion]:
 
 
-def sprinkle_call_assume_postcondition(name: source.NodeName, node: source.NodeCall[Any], postcond: source.ExprT[source.ProgVarName | nip.GuardVarName]) -> Insertion:
-    return Insertion(node_name=source.NodeName(f"assume_postcond_{name}_{node.succ}"), after=name, before=node.succ, kind=K.NODE_ASSUME_POST_CONDITION_FNCALL, expr=postcond)
+def sprinkle_function_call_pre_and_post_condition(func: nip.Function,
+                                                  node_name: source.NodeName,
+                                                  node: source.NodeCall[source.ProgVarName | nip.GuardVarName],
+                                                  signatures: Mapping[str, TemporaryFunctionSignature]) -> Iterable[Insertion]:
+
+    # the parameters are the "variable" in a method definition
+    # the arguments are the values you pass at function call
+    # (you define the parameters, you make the arguments)
+    params = signatures[node.fname].parameters
+    assert len(node.args) == len(params)
+    call_stash_updates = tuple(source.Update(source.ExprVar(param.typ, CallArgVarName(param.name + '/call-arg')), arg)
+                               for param, arg in zip(params, node.args))
+
+    def f(var: source.ExprVarT[source.ProgVarName | nip.GuardVarName]) -> source.ExprVarT[source.ProgVarName | nip.GuardVarName]:
+        # this will change with the new way of writing specs
+        if not var.name.endswith('/arg'):
+            assert False, f"unknown variable {var.name}"
+
+        return call_arg_var_name(var)
+
+    for i, pred in enumerate(func.cfg.all_preds[node_name], start=1):
+        yield Insertion(after=pred,
+                        before=node_name,
+                        node_name=source.NodeName(
+                            f'call_stash_{node_name}_pred_{i}'),
+                        mk_node=lambda succ: source.NodeBasic(call_stash_updates, succ))
+
+        precond = source.convert_expr_vars(
+            f, signatures[node.fname].precondition)
+        yield Insertion(after=pred,
+                        before=node_name,
+                        node_name=source.NodeName(
+                            f'call_pre_{node_name}_pred_{i}'),
+                        mk_node=lambda succ: NodePrecondObligationFnCall(precond, succ))
+
+    rets = node.rets  # pyright isn't smart enough
+
+    def g(var: source.ExprVarT[source.ProgVarName | nip.GuardVarName]) -> source.ExprVarT[source.ProgVarName | nip.GuardVarName]:
+        if isinstance(var.name, source.CRetSpecialVar):
+            assert 0 <= var.name.field_num and var.name.field_num <= len(
+                rets) - NUM_GHOST_VARIABLES_CPARSER_FUNCTION_CALL
+            return rets[var.name.field_num]
+        elif var.name.endswith("/arg"):
+            return call_arg_var_name(var)
+        return var
+
+    postcond = source.convert_expr_vars(
+        g, signatures[node.fname].postcondition)
+    yield Insertion(after=node_name,
+                    before=node.succ,
+                    node_name=source.NodeName(f'call_post_{node_name}'),
+                    mk_node=lambda succ: NodeAssumePostCondFnCall(postcond,
+                                                                  succ))
 
 
-def unify_preconds(raw_precondition: source.ExprT[source.HumanVarName], args: Tuple[source.ExprT[source.VarNameKind], ...], expected_args: Tuple[source.ExprVarT[source.ProgVarName], ...]) -> Tuple[Dict[source.ExprVarT[source.HumanVarName], source.ExprT[source.VarNameKind]], source.ExprT[source.VarNameKind]]:
-    conversion_map: Dict[source.ExprVarT[source.HumanVarName],
-                         source.ExprT[source.VarNameKind]] = {}
-
-    assert len(expected_args) == len(args)
-
-    for garg, earg in zip(args, expected_args):
-        assert garg.typ == earg.typ
-        conversion_map[source.ExprVar(earg.typ, source.HumanVarName(
-            source.HumanVarNameSubject(earg.name.split('___')[0]), path=(), use_guard=False))] = garg
-
-    def f(v: source.ExprVarT[source.HumanVarName]) -> source.ExprT[source.VarNameKind]:
-        return conversion_map[v]
-    return (conversion_map, source.convert_expr_vars(f, raw_precondition))
+def sprinkle_function_call_pre_and_post_conditions(func: nip.Function,
+                                                   signatures: Mapping[str, TemporaryFunctionSignature]) -> Iterable[Insertion]:
+    for node_name in func.traverse_topologically(skip_err_and_ret=True):
+        node = func.nodes[node_name]
+        if isinstance(node, source.NodeCall):
+            yield from sprinkle_function_call_pre_and_post_condition(func, node_name, node, signatures)
 
 
-def is_special_return_variable(name: source.ProgVarName) -> bool:
-    return name.startswith("ret__") and not name.startswith("ret___")
+@dataclass(frozen=True, slots=True)
+class TemporaryFunctionSignature:
+    """ These function signatures should be all loaded at the start,
+        and then passed through each functions.
+
+        At load time, we should make sure that the precondition and the post
+        condition only talk about the variables they are allowed to talk
+        about.
+
+        TODO: make this temporary function signature the new
+        FunctionSignature
+    """
+    parameters: Tuple[source.ExprVarT[source.ProgVarName], ...]
+    returns: Tuple[source.ExprVarT[source.ProgVarName], ...]
+
+    precondition: source.ExprT[source.ProgVarName | nip.GuardVarName]
+    postcondition: source.ExprT[source.ProgVarName | nip.GuardVarName]
 
 
-def unify_postconds(raw_postcondition: source.ExprT[source.HumanVarName],
-                    rets: Tuple[source.ExprT[source.VarNameKind], ...], expected_rets: Tuple[source.ExprVarT[source.ProgVarName], ...],
-                    conversion_map: Dict[source.ExprVarT[source.HumanVarName], source.ExprT[source.VarNameKind]]) -> source.ExprT[source.VarNameKind]:
-    assert len(rets) == len(expected_rets)
+def sprinkle_ghost_code(filename: str, func: nip.Function, unsafe_ctx: Mapping[str, syntax.Function]) -> Function:
+    ctx: dict[str, TemporaryFunctionSignature] = {}
+    for fname, syn_func in unsafe_ctx.items():
+        sig = source.convert_function_metadata(syn_func)
+        ghost = ghost_data.get(filename, fname)
 
-    # this relies on the assumption that there is only one c return variable
-    num_rets = 0
-    for gret, eret in zip(rets, expected_rets):
-        if is_special_return_variable(eret.name):
-            name = source.HumanVarName(
-                source.HumanVarNameSpecial.RET, path=(), use_guard=False)
-            num_rets += 1
-        else:
-            name = source.HumanVarName(source.HumanVarNameSubject(
-                eret.name), path=(), use_guard=False)
-        conversion_map[source.ExprVar(eret.typ, name)] = gret
-
-    assert num_rets <= 1, "multiple return variables were found"
-
-    def f(v: source.ExprVarT[source.HumanVarName]) -> source.ExprT[source.VarNameKind]:
-        return conversion_map[v]
-
-    return source.convert_expr_vars(f, raw_postcondition)
-
-
-def sprinkle_call_conditions(filename: str, fn: nip.Function, ctx: Dict[str, source.FunctionSignature[source.ProgVarName]]) -> Iterator[Insertion]:
-    for name in fn.traverse_topologically(skip_err_and_ret=True):
-        node = fn.nodes[name]
-        if not isinstance(node,  source.NodeCall):
-            continue
-
-        ghost = ghost_data.get(filename, node.fname)
-
+        precondition: source.ExprT[source.ProgVarName | nip.GuardVarName]
+        postcondition: source.ExprT[source.ProgVarName | nip.GuardVarName]
         if ghost is None:
-            return
+            precondition = source.expr_true
+            postcondition = source.expr_true
+        else:
+            precondition = ghost.precondition
+            postcondition = ghost.postcondition
 
-        # asserting True and assuming True is basically doing nothing
-        raw_precondition = source.expr_true if ghost is None else ghost.precondition
-        raw_postcondition = source.expr_true if ghost is None else ghost.postcondition
-        call_target = ctx[node.fname]
-        assert call_target is not None
-        conversion_map, precondition = unify_preconds(
-            raw_precondition, node.args, call_target.parameters)
-        postcondition = unify_postconds(
-            raw_postcondition, node.rets, call_target.returns, conversion_map)
-        yield from sprinkle_call_assert_preconditions(fn, name, precondition)
-        yield sprinkle_call_assume_postcondition(name, node, postcondition)
+        ctx[fname] = TemporaryFunctionSignature(parameters=sig.parameters,
+                                                returns=sig.returns,
+                                                precondition=precondition,
+                                                postcondition=postcondition)
 
-# sprinkle isn't the most trustworthy sounding word, but it's the most
-# descriptive one I could think of
-
-
-def sprinkle_ghost_code(filename: str, func: nip.Function, ctx: Dict[str, syntax.Function]) -> Function:
-    new_ctx: dict[str, source.FunctionSignature[source.ProgVarName]] = {}
-    for fname, syn_func in ctx.items():
-        new_ctx[fname] = source.convert_function_metadata(syn_func)
     insertions: list[Insertion] = []
-    insertions.extend(sprinkle_precondition(func))
-    insertions.extend(sprinkle_postcondition(func))
+    insertions.extend(sprinkle_subject_pre_and_post_conditions(func))
+    insertions.extend(
+        sprinkle_function_call_pre_and_post_conditions(func, ctx))
     insertions.extend(sprinkle_loop_invariants(func))
-    insertions.extend(sprinkle_call_conditions(filename, func, new_ctx))
+
     new_nodes = apply_insertions(func, insertions)
     all_succs = abc_cfg.compute_all_successors_from_nodes(new_nodes)
     cfg = abc_cfg.compute_cfg_from_all_succs(all_succs, func.cfg.entry)
@@ -347,7 +385,5 @@ def sprinkle_ghost_code(filename: str, func: nip.Function, ctx: Dict[str, syntax
         new_nodes, cfg)
     assert loops.keys() == func.loops.keys(
     ), "more work required: loop headers changed during conversion, need to keep ghost's loop invariant in sync"
-
-    # new_nodes = search_common_succs(func, cfg)
 
     return Function(name=func.name, nodes=new_nodes, cfg=cfg, loops=loops, ghost=func.ghost, signature=func.signature)

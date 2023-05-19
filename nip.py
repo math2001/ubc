@@ -21,6 +21,7 @@ from typing_extensions import assert_never
 import source
 
 
+# TODO: this should be a sub type of ProgVar, and be annotated as being ghost
 class GuardVarName(str):
     """ for example foo___int#v#assigned """
 
@@ -118,6 +119,10 @@ class UnificationError(Exception):
 
 
 def unify_variables_to_make_ghost(func: source.Function) -> source.Ghost[source.ProgVarName | GuardVarName]:
+    return func.ghost
+
+    # TODO: we will clean this up when we will use the new system to write
+    # specification
     conversion_map: defaultdict[source.ExprVarT[source.HumanVarName],
                                 list[source.ExprVarT[source.ProgVarName | GuardVarName]]] = defaultdict(lambda: [])
 
@@ -129,8 +134,6 @@ def unify_variables_to_make_ghost(func: source.Function) -> source.Ghost[source.
             prefix, path=(), use_guard=False))].append(var)
         conversion_map[source.ExprVar(source.type_bool, source.HumanVarName(
             prefix, path=(), use_guard=True))].append(guard_var(var))
-
-    # conversion_map[]
 
     def converter(human: source.ExprVarT[source.HumanVarName]) -> source.ExprVarT[source.ProgVarName | GuardVarName]:
         if human not in conversion_map:
@@ -272,5 +275,7 @@ def nip(func: source.Function) -> Function:
     assert loops.keys() == func.loops.keys(
     ), "more work required: loop headers changed during conversion, need to keep ghost's loop invariant in sync"
 
+    # return Function(cfg=cfg, nodes=new_nodes, loops=loops, signature=func.signature,
+    #                 name=func.name, ghost=unify_variables_to_make_ghost(func))
     return Function(cfg=cfg, nodes=new_nodes, loops=loops, signature=func.signature,
-                    name=func.name, ghost=unify_variables_to_make_ghost(func))
+                    name=func.name, ghost=func.ghost)

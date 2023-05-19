@@ -510,5 +510,35 @@ void ghost_add_1__fail()
 
 void ghost_add_3()
 {
+    ghost_add_1__fail();
+    ghost_add_1__fail();
+    ghost_add_1__fail();
+    return;
+}
+
+void ghost_add_2__fail()
+{
+    ghost_add_1__fail();
+    ghost_add_1__fail();
+    ghost_add_1__fail();
+    return;
+}
+
+
+void concrete_ghost_interaction(int n)
+{
+    for (int i = 0; i < n; i++)
+    {
+        ghost_add_1__fail();
+    }
+    return;
+}
+
+void concrete_ghost_interaction__fail(int n)
+{
+    for (int i = 0; i < n; i++)
+    {
+        ghost_add_1__fail();
+    }
     return;
 }

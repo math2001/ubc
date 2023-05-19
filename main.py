@@ -200,6 +200,8 @@ def usage() -> None:
     print('usage: python3 main.py [options] <graphfile.txt> function-names...')
     print()
     print('  --show-graph: Show the graph lang')
+    print('  --show-nip: Show the nip stage')
+    print('  --show-ghost: Show the ghost stage')
     print('  --show-dsa: Show the graph after having applied dynamic single assignment')
     print('  --show-ap: Show the assume prove prog')
     print('  --show-smt: Show the SMT given to the solvers')

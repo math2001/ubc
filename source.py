@@ -136,7 +136,21 @@ class TypeWordArray:
     """
 
 
-Type = TypeStruct | TypeBitVec | TypePtr | TypeArray | TypeFloatingPoint | TypeBuiltin | TypeWordArray
+class SpecGhostName(str):
+    pass
+
+
+@dataclass(frozen=True, order=True, slots=True)
+class TypeSpecGhost:
+    """
+    The specification might require keepnig track of more ghost state.
+
+    Own can have multiple spec ghost. They are differentiated by their name.
+    """
+    name: SpecGhostName
+
+
+Type = TypeStruct | TypeBitVec | TypePtr | TypeArray | TypeFloatingPoint | TypeBuiltin | TypeWordArray | TypeSpecGhost
 
 
 def pretty_type_ascii(typ: Type) -> str:
@@ -156,6 +170,8 @@ def pretty_type_ascii(typ: Type) -> str:
         return str(typ)
     elif isinstance(typ, TypeWordArray):
         return str(typ)
+    elif isinstance(typ, TypeSpecGhost):
+        return f"sg'{typ.name}'"
     assert_never(typ)
 
 
@@ -189,13 +205,6 @@ def convert_type(typ: syntax.Type) -> Type:
     elif typ.kind == 'Builtin':
         return TypeBuiltin(Builtin(typ.name))
     elif typ.kind == 'WordArray':
-        # DANGEROUS HACK
-        #
-        # we hack GhostAssertion. We assume (correctly) that only
-        # GhostAssertions is the only thing that has this particular type,
-        # and we hijack it to store the platform context
-        if typ.nums[0] == 50 and typ.nums[1] == 32:
-            return TypeBitVec(471)  # size of a platform context
         return TypeWordArray(typ.nums[0], typ.nums[1])
     raise NotImplementedError(f"Type {typ.kind} not implemented")
 
@@ -971,6 +980,33 @@ def assigned_variables_in_node(func: GhostlessFunction[VarNameKind, Any], n: Nod
     return assigned_variables
 
 
+"""
+This step (inserting the ghost state) should be done in one clean stage,
+instead of hooking up here.
+
+This is not done now because the later stage ghost code manually load
+functions again, so we have to change the source. In the future, we will only
+ever load once (and thus patch once and for all).
+"""
+
+
+@dataclass(frozen=True, slots=True, order=True)
+class SpecGhost:
+    name: str
+    bit_size: int
+
+
+"""
+This should be loaded from a specification description (ie. a prelude and list
+of spec ghosts). This will be done in the stage mentionned above.
+"""
+spec_ghosts: tuple[SpecGhost, ...] = (SpecGhost(name="test", bit_size=32), )
+
+
+def mk_spec_ghost_var(sg: SpecGhost) -> ExprVarT[ProgVarName]:
+    return ExprVar(TypeBitVec(sg.bit_size), ProgVarName(sg.name + '#ghost'))
+
+
 def convert_function_nodes(nodes: Mapping[str | int, syntax.Node]) -> Mapping[NodeName, Node[ProgVarName]]:
     safe_nodes: dict[NodeName, Node[ProgVarName]] = {}
     for name, node in nodes.items():
@@ -988,12 +1024,15 @@ def convert_function_nodes(nodes: Mapping[str | int, syntax.Node]) -> Mapping[No
                 safe_nodes[name] = NodeBasic(upds=tuple(
                     upds), succ=NodeName(str(node.cont)))
         elif node.kind == "Call":
-            node.args
             safe_nodes[name] = NodeCall(
                 succ=NodeName(str(node.cont)),
                 fname=node.fname,
-                args=tuple(convert_expr(arg) for arg in node.args),
-                rets=tuple(ExprVar(convert_type(typ), ProgVarName(name)) for name, typ in node.rets))
+                args=tuple(convert_expr(arg) for arg in node.args)
+                + tuple(mk_spec_ghost_var(sg) for sg in spec_ghosts),
+                rets=tuple(ExprVar(convert_type(typ), ProgVarName(name))
+                           for name, typ in node.rets)
+                + tuple(mk_spec_ghost_var(sg) for sg in spec_ghosts))
+
         elif node.kind == "Cond":
             safe_nodes[name] = NodeCond(
                 succ_then=NodeName(str(node.left)), succ_else=NodeName(str(node.right)), expr=convert_expr(node.cond))
@@ -1010,9 +1049,13 @@ class FunctionSignature(Generic[VarNameKind]):
 
 def convert_function_metadata(func: syntax.Function) -> FunctionSignature[ProgVarName]:
     args = tuple(ExprVar(convert_type(typ), ProgVarName(name))
-                 for name, typ in func.inputs)
+                 for name, typ in func.inputs) \
+        + tuple(mk_spec_ghost_var(sg) for sg in spec_ghosts)
+
     rets = tuple(ExprVar(convert_type(typ), ProgVarName(name))
-                 for name, typ in func.outputs)
+                 for name, typ in func.outputs) \
+        + tuple(mk_spec_ghost_var(sg) for sg in spec_ghosts)
+
     return FunctionSignature(args, rets)
 
 

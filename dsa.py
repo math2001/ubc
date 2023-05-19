@@ -331,46 +331,46 @@ def dsa(func: ghost_code.Function) -> Function:
 
             dsa_loop_targets[loop_header] = tuple(targets)
 
-        if isinstance(node, ghost_code.NodePostConditionProofObligation):
-            # we need to use the entry's context for the argument variables in
-            # the post condition, eg
-            #
-            #     int add_one(int n)
-            #     ensures ret == n + 1
-            #     {
-            #         n = 0;         // n2 = 0
-            #         return 1;      // prove 1 == n1 + 1    ; notice n1, not n2
-            #     }
-            #
-            # This function shouldn't verify. From the perspective of the
-            # caller,
-            #
-            #     add_one(3) == 4, not 1
-            #
-            # But for local variable, it should be just regular DSA
-            #
-            #     int add(int a, int b)
-            #     ensures ret == a + b
-            #     {
-            #         int sum = 0;      // sum1 = 0
-            #         sum = sum + a;    // sum2 = sum1 + a1
-            #         sum = sum + b;    // sum3 = sum2 + b1
-            #         a = 0;            // a2 = 0
-            #         b = 0;            // b2 = 0
-            #         return sum;       // prove sum3 = a1 + b1   ; notice sum3, not sum1
-            #     }
-            #
-            # using a different context in the middle of the graph could
-            # result in some very weird behavior. This doesn't matter because
-            # the post condition proof obligation is right at the bottom of
-            # the function. So to be safe, we validate those assumptions
-            assert node.succ_then == source.NodeNameRet, node.succ_then
-            assert node.succ_else == source.NodeNameErr, node.succ_else
+        # if isinstance(node, ghost_code.NodePostConditionProofObligation):
+        #     # we need to use the entry's context for the argument variables in
+        #     # the post condition, eg
+        #     #
+        #     #     int add_one(int n)
+        #     #     ensures ret == n + 1
+        #     #     {
+        #     #         n = 0;         // n2 = 0
+        #     #         return 1;      // prove 1 == n1 + 1    ; notice n1, not n2
+        #     #     }
+        #     #
+        #     # This function shouldn't verify. From the perspective of the
+        #     # caller,
+        #     #
+        #     #     add_one(3) == 4, not 1
+        #     #
+        #     # But for local variable, it should be just regular DSA
+        #     #
+        #     #     int add(int a, int b)
+        #     #     ensures ret == a + b
+        #     #     {
+        #     #         int sum = 0;      // sum1 = 0
+        #     #         sum = sum + a;    // sum2 = sum1 + a1
+        #     #         sum = sum + b;    // sum3 = sum2 + b1
+        #     #         a = 0;            // a2 = 0
+        #     #         b = 0;            // b2 = 0
+        #     #         return sum;       // prove sum3 = a1 + b1   ; notice sum3, not sum1
+        #     #     }
+        #     #
+        #     # using a different context in the middle of the graph could
+        #     # result in some very weird behavior. This doesn't matter because
+        #     # the post condition proof obligation is right at the bottom of
+        #     # the function. So to be safe, we validate those assumptions
+        #     assert node.succ_then == source.NodeNameRet, node.succ_then
+        #     assert node.succ_else == source.NodeNameErr, node.succ_else
 
-            # in the post condition, when you mention a function argument, you
-            # mean its value at the start of the function.
-            for arg in func.signature.parameters:
-                context[arg] = entry_context[arg]
+        #     # in the post condition, when you mention a function argument, you
+        #     # mean its value at the start of the function.
+        #     for arg in func.signature.parameters:
+        #         context[arg] = entry_context[arg]
 
         added_incarnations: dict[source.ExprVarT[source.ProgVarName |
                                                  nip.GuardVarName], Var[source.ProgVarName | nip.GuardVarName]] = {}

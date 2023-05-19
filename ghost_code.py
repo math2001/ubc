@@ -247,11 +247,18 @@ def sprinkle_loop_invariant(func: nip.Function, lh: source.LoopHeaderName) -> It
     # specs
 
     # ALL predecessors, including predecessors that follow a back edge
+
+    def f(var: source.ExprVarT[source.ProgVarName | nip.GuardVarName]) -> source.ExprVarT[source.ProgVarName | nip.GuardVarName]:
+        if var.name.endswith('/arg'):
+            return subject_arg_var_name(var)
+        return var
+
+    inv = source.convert_expr_vars(f, func.ghost.loop_invariants[lh])
     for i, pred in enumerate(func.cfg.all_preds[lh], start=1):
         yield Insertion(after=pred,
                         before=lh,
                         node_name=source.NodeName(f'loop_{lh}_latch_{i}'),
-                        mk_node=lambda succ: NodeLoopInvariantProofObligation(func.ghost.loop_invariants[lh],
+                        mk_node=lambda succ: NodeLoopInvariantProofObligation(inv,
                                                                               succ,
                                                                               source.NodeNameErr))
 
@@ -259,7 +266,7 @@ def sprinkle_loop_invariant(func: nip.Function, lh: source.LoopHeaderName) -> It
         yield Insertion(after=lh,
                         before=nsucc,
                         node_name=source.NodeName(f'loop_{lh}_inv_asm_{i}'),
-                        mk_node=lambda succ: NodeLoopInvariantAssumption(func.ghost.loop_invariants[lh],
+                        mk_node=lambda succ: NodeLoopInvariantAssumption(inv,
                                                                          succ))
 
 

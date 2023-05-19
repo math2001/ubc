@@ -56,8 +56,10 @@ def i64(n: int) -> source.ExprNumT:
     return source.ExprNum(source.type_word64, n)
 
 
-def g(var: source.ExprVarT[source.ProgVarName]) -> source.ExprVarT[nip.GuardVarName]:
+def g(var: source.ExprVarT[source.ProgVarName] | str) -> source.ExprVarT[nip.GuardVarName]:
     """ guard """
+    if isinstance(var, str):
+        return source.ExprVar(source.type_bool, nip.guard_name(source.ProgVarName(var)))
     return source.ExprVar(source.type_bool, nip.guard_name(source.ProgVarName(var.name)))
 
 
@@ -85,7 +87,10 @@ def lh(x: str) -> source.LoopHeaderName:
 # lc = source.ExprVar(source.TypeBitVec(471), source.HumanVarName(
 #     source.HumanVarNameSubject('GhostAssertions'), path=(), use_guard=False))
 
-lc = source.ProgVarName('GhostAssertions')
+# lc = source.ProgVarName('GhostAssertions')
+
+testghost = source.ExprVar(source.TypeBitVec(
+    32), source.ProgVarName("test#ghost"))
 
 Ch = source.TypeBitVec(6)
 Set_Ch = source.TypeBitVec(64)
@@ -221,7 +226,49 @@ universe: Mapping[str, Mapping[str, source.Ghost[source.ProgVarName | nip.GuardV
             postcondition=eq(i32ret, mul(sub(arg(i32v('y')), i32(1)), i32(2))),
         ),
 
+        "tmp.ghost_add_1__fail": source.Ghost(loop_invariants={},
+                                              precondition=T,
+                                              postcondition=eq(testghost, plus(arg(testghost), i32(1)))),
 
+        "tmp.ghost_add_3": source.Ghost(loop_invariants={},
+                                        precondition=T,
+                                        postcondition=eq(testghost, plus(arg(testghost), i32(3)))),
+        "tmp.ghost_add_2__fail": source.Ghost(loop_invariants={},
+                                              precondition=T,
+                                              postcondition=eq(testghost, plus(arg(testghost), i32(2)))),
+
+        "tmp.concrete_ghost_interaction": source.Ghost(
+            loop_invariants={
+                lh('3'): conjs(g(i32v('i')),
+                               g(i32v('n')),
+                               g('GhostAssertions'),
+                               g('Mem'),
+                               g(testghost),
+                               g('PMS'),
+                               g('HTD'),
+                               sbounded(i32v('i'), i32(0), i32v('n')),
+                               eq(testghost, plus(arg(testghost), i32v('i')))
+                               )
+            },
+            precondition=sbounded(arg(i32v('n')), i32(0), i32(10)),
+            postcondition=eq(testghost, plus(arg(testghost), arg(i32v('n'))))),
+
+        "tmp.concrete_ghost_interaction__fail": source.Ghost(
+            loop_invariants={
+                lh('3'): conjs(g(i32v('i')),
+                               g(i32v('n')),
+                               g('GhostAssertions'),
+                               g('Mem'),
+                               g(testghost),
+                               g('PMS'),
+                               g('HTD'),
+                               sbounded(i32v('i'), i32(0), i32v('n')),
+                               eq(testghost, plus(arg(testghost), i32v('i')))
+                               )
+            },
+            precondition=sbounded(arg(i32v('n')), i32(0), i32(10)),
+            postcondition=eq(testghost, plus(arg(testghost), plus(arg(i32v('n')), i32(1)))))
+        # the +1 breaks everything here
     },
 
     # "tests/libsel4cp_trunc.txt": {

@@ -73,8 +73,6 @@ def ensure_using_latest_incarnation(func: dsa.Function, path: Collection[source.
         assert prog_var not in latest_incarnations
         latest_incarnations[prog_var] = inc
 
-    entry_incarnations = dict(latest_incarnations)
-
     for n in path:
         if n in (source.NodeNameErr, source.NodeNameRet):
             continue
@@ -88,16 +86,7 @@ def ensure_using_latest_incarnation(func: dsa.Function, path: Collection[source.
                     latest_incarnations[prog_var] = inc
 
             prog_var, inc = dsa.unpack_dsa_var(dsa_var)
-            if isinstance(func.nodes[n], ghost_code.NodePostConditionProofObligation):
-                if any(prog_var == dsa.unpack_dsa_var(dsa_var)[0] for dsa_var in func.signature.parameters):
-                    assert inc == entry_incarnations[prog_var], f'{inc} {entry_incarnations[prog_var]}'
-                elif prog_var in latest_incarnations:
-                    # FIXME: we shouldn't need this condition here
-                    #        this is only because of the assert False node
-                    #        TODO: skip this test if the start node isn't reachable
-                    #              from the entry node
-                    assert inc == latest_incarnations[prog_var], f'{inc} {latest_incarnations[prog_var]}'
-            elif prog_var in latest_incarnations:
+            if prog_var in latest_incarnations:
                 assert inc == latest_incarnations[prog_var], f"{prog_var=} {n=} {path=}"
 
             # we don't assert that inc == 1 otherwise, because prog_var:1
@@ -265,14 +254,6 @@ def ensure_valid_contexts(func: dsa.Function) -> None:
         for v in source.assigned_variables_in_node(func, n, with_loop_targets=True):
             new_contexts[n][dsa.get_base_var(v)] = v.name.inc
 
-        if isinstance(func.nodes[n], ghost_code.NodePostConditionProofObligation):
-            assert isinstance(func.nodes[n], source.NodeCond)
-            # in the post condition, when referencing function arguments, you
-            # use initial incarnations.
-            for dsa_var in func.signature.parameters:
-                prog_var, inc = dsa.unpack_dsa_var(dsa_var)
-                new_contexts[n][prog_var] = inc
-
         if new_contexts[n] != func.contexts[n]:
             diff = set(new_contexts[n].items()) ^ set(func.contexts[n].items())
             print('reference:', [(v.name, inc)
@@ -292,7 +273,7 @@ def ensure_valid_variables(func: dsa.Function) -> None:
 
     def add_or_ensure_same_typ(var_name: dsa.Incarnation[source.ProgVarName | nip.GuardVarName], typ: source.Type) -> None:
         if var_name in var_types:
-            assert var_types[var_name] == typ
+            assert var_types[var_name] == typ, f"{var_name=} {var_types[var_name]=} {typ=}"
         var_types[var_name] = typ
 
     def check_expr_visitor(expr: source.ExprT[dsa.Incarnation[source.ProgVarName | nip.GuardVarName]]) -> None:

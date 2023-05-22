@@ -98,6 +98,8 @@ class CmdAssert(NamedTuple):
 
 class CmdCheckSat(NamedTuple):
     pass
+
+
 class CmdDefineFun(NamedTuple):
     symbol: Identifier
     args: Sequence[source.ExprVarT[assume_prove.VarName]]
@@ -112,6 +114,7 @@ class CmdDeclareSort(NamedTuple):
 
 class CmdComment(NamedTuple):
     comment: str
+
 
 class CmdGetModel(NamedTuple):
     pass
@@ -358,15 +361,16 @@ def make_smtlib(p: assume_prove.AssumeProveProg, assert_ok_nodes: Collection[sou
         expr = assume_prove.apply_weakest_precondition(script)
         cmds.append(cmd_assert_eq(node_ok_name, expr))
 
-
     cmds.append(CmdCheckSat())
     if assert_ok_nodes is not None:
         for ok_node in assert_ok_nodes:
             # sanity check if this assert_additional_node actually exists
             node_ok_name = assume_prove.node_ok_name(ok_node)
             assert node_ok_name in p.nodes_script
-            cmds.append(CmdComment("WARNING: NOT A VALID PROOF RELATED SMT EXPORT This is used for error reporting only"))
-            cmds.append(CmdAssert(source.ExprVar(source.type_bool, node_ok_name)))
+            cmds.append(CmdComment(
+                "WARNING: NOT A VALID PROOF RELATED SMT EXPORT This is used for error reporting only"))
+            cmds.append(CmdAssert(source.ExprVar(
+                source.type_bool, node_ok_name)))
             cmds.append(CmdCheckSat())
 
     cmds.append(CmdAssert(source.expr_negate(

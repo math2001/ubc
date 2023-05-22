@@ -18,8 +18,9 @@ DSANode = source.Node[dsa.Incarnation[source.ProgVarName | nip.GuardVarName]]
 DSAExprT = source.ExprT[dsa.Incarnation[source.ProgVarName | nip.GuardVarName]]
 
 
-def eprint(*args, **kwargs) -> None: # type: ignore
+def eprint(*args, **kwargs) -> None:  # type: ignore
     print(*args, file=sys.stderr, **kwargs)
+
 
 class OverflowFailure(NamedTuple):
     pass
@@ -51,8 +52,9 @@ FailureReason = OverflowFailure | UnderflowFailure | UnknownFailure | UnInitiali
 def expr_common_arith() -> Set[source.Operator]:
     return {source.Operator.EQUALS, source.Operator.SIGNED_LESS, source.Operator.SIGNED_LESS_EQUALS, source.Operator.AND, source.Operator.OR}
 
+
 def check_ops(e: DSAExprT, allowed_ops: Set[source.Operator]) -> bool:
-    valid: bool = True 
+    valid: bool = True
 
     def visitor(v: DSAExprT) -> None:
         if isinstance(v, source.ExprOp):
@@ -68,13 +70,18 @@ def check_ops(e: DSAExprT, allowed_ops: Set[source.Operator]) -> bool:
     source.visit_expr(e, visitor)
     return valid
 
+
 def expr_all_adds(e: DSAExprT) -> bool:
-    allowed_ops = {source.Operator.PLUS, source.Operator.TIMES}.union(expr_common_arith()) 
+    allowed_ops = {source.Operator.PLUS,
+                   source.Operator.TIMES}.union(expr_common_arith())
     return check_ops(e, allowed_ops)
 
+
 def expr_all_subtract(e: DSAExprT) -> bool:
-    allowed_ops = {source.Operator.MINUS, source.Operator.DIVIDED_BY}.union(expr_common_arith())
+    allowed_ops = {source.Operator.MINUS,
+                   source.Operator.DIVIDED_BY}.union(expr_common_arith())
     return check_ops(e, allowed_ops)
+
 
 def expr_all_pointeralignops(e: DSAExprT) -> bool:
     # TODO: When we handle memory
@@ -82,8 +89,9 @@ def expr_all_pointeralignops(e: DSAExprT) -> bool:
 
 
 def expr_all_pointervalidops(e: DSAExprT) -> bool:
-    #TODO: When we handle memory
+    # TODO: When we handle memory
     return False
+
 
 def determine_reason(node: DSANode) -> FailureReason:
     # We certainly shouldn't see these
@@ -91,7 +99,7 @@ def determine_reason(node: DSANode) -> FailureReason:
     assert not isinstance(node, source.NodeCall)
     assert not isinstance(node, source.NodeEmpty)
     if isinstance(node, source.NodeEmpty):
-        # We really shouldn't see this. 
+        # We really shouldn't see this.
         return UnknownFailure()
     elif isinstance(node.origin, ProvenanceNipGuard):
         return UnInitialised()
@@ -159,13 +167,16 @@ def extract_and_print_why(func: dsa.Function, reason: FailureReason, node: DSANo
         assert len(
             variables) > 0, "Makes no sense for no variables to be uninitialised and still have the reason as uninitialised"
         if len(variables) == 1:
-            eprint(f"{variables[0]} was uninitialised when used, refer to GraphLang at node {succ_node_name}")
+            eprint(
+                f"{variables[0]} was uninitialised when used, refer to GraphLang at node {succ_node_name}")
         else:
-            eprint(f"one of {variables} was uninitialised, refer to GraphLang at node {succ_node_name}")
+            eprint(
+                f"one of {variables} was uninitialised, refer to GraphLang at node {succ_node_name}")
         return succ_node_name
     elif isinstance(reason, OverflowFailure | UnderflowFailure):
         assert isinstance(node, source.NodeCond)
-        failure_str = "overflow" if isinstance(reason, OverflowFailure) else "underflow"
+        failure_str = "overflow" if isinstance(
+            reason, OverflowFailure) else "underflow"
         variables = list(map(human_var, source.used_variables_in_node(node)))
         succ_node_name = node.succ_then
         succ_node = func.nodes[succ_node_name]
@@ -178,11 +189,12 @@ def extract_and_print_why(func: dsa.Function, reason: FailureReason, node: DSANo
         if len(variables) == 0:
             assert False, "This should never be the case"
         elif len(variables) == 1:
-            eprint(f"variable {variables[0]} is involved in an {failure_str}, refer to GraphLang at node {succ_succ_node_name}")
+            eprint(
+                f"variable {variables[0]} is involved in an {failure_str}, refer to GraphLang at node {succ_succ_node_name}")
         else:
             eprint(f"one or more of variables", variables,
-                  f"leads to an {failure_str} from some interleaving of arithmetic operation(s), refer to GraphLang at node {succ_succ_node_name}")
-        return succ_succ_node_name  
+                   f"leads to an {failure_str} from some interleaving of arithmetic operation(s), refer to GraphLang at node {succ_succ_node_name}")
+        return succ_succ_node_name
     elif isinstance(reason, UnknownFailure):
         assert False, "Some condition wasn't handled"
     elif isinstance(reason, InvalidMemory):
@@ -191,6 +203,7 @@ def extract_and_print_why(func: dsa.Function, reason: FailureReason, node: DSANo
         assert False, "TODO"
     else:
         assert_never(reason)
+
 
 def get_sat(smtlib: smt.SMTLIB) -> smt.CheckSatResult:
     results = tuple(smt.send_smtlib(smtlib, smt.SolverCVC5()))
@@ -216,6 +229,7 @@ def pretty_node(node: DSANode) -> str:
     else:
         assert_never(node)
 
+
 def send_smtlib_model(smtlib: smt.SMTLIB, solver_type: smt.SolverType) -> smt.Responses:
     """Send command to any smt solver and returns a boolean per (check-sat)
     """
@@ -239,6 +253,7 @@ def send_smtlib_model(smtlib: smt.SMTLIB, solver_type: smt.SolverType) -> smt.Re
     print(res)
     exit(1)
 
+
 def debug_func_smt(func: dsa.Function) -> Tuple[FailureReason, source.NodeName, Optional[source.NodeName]]:
     prog = ap.make_prog(func)
     q: set[source.NodeName] = set([func.cfg.entry])
@@ -251,26 +266,30 @@ def debug_func_smt(func: dsa.Function) -> Tuple[FailureReason, source.NodeName, 
         node_smtlib = smt.make_smtlib(prog, not_taken_path_and_node)
         node_sat = get_sat(node_smtlib)
         # we do not care about the Err node
-        successors = list(filter(lambda x: x != source.NodeNameErr, func.cfg.all_succs[node_name]))
-        successors_smtlib = smt.make_smtlib(prog, not_taken_path.union(set(successors)))
+        successors = list(
+            filter(lambda x: x != source.NodeNameErr, func.cfg.all_succs[node_name]))
+        successors_smtlib = smt.make_smtlib(
+            prog, not_taken_path.union(set(successors)))
         successors_sat = get_sat(successors_smtlib)
         if successors_sat == smt.CheckSatResult.SAT and node_sat == smt.CheckSatResult.UNSAT:
-            # This is our error node  
-            succ_smtlib_with_model = smt.make_smtlib(prog, not_taken_path.union(set(successors)), with_model=True)
-            succ_model = tuple(send_smtlib_model(succ_smtlib_with_model, smt.SolverZ3()))
+            # This is our error node
+            succ_smtlib_with_model = smt.make_smtlib(
+                prog, not_taken_path.union(set(successors)), with_model=True)
+            succ_model = tuple(send_smtlib_model(
+                succ_smtlib_with_model, smt.SolverZ3()))
             print(succ_model)
             reason = determine_reason(node)
             print_reason(reason)
-            
+
             # used_node_name is optional because could not determine the reason
             used_node_name = extract_and_print_why(func, reason, node)
             if used_node_name is not None:
                 used_node = func.nodes[used_node_name]
                 print(pretty_node(used_node))
             return (reason, node_name, used_node_name)
-        
+
         # When len(successors) == 1 and it is a NodeCond, it is because the succ_else path to NodeNameErr was trimmed
-        # This is handled above, so we skip it. 
+        # This is handled above, so we skip it.
         if isinstance(node, source.NodeCond) and len(successors) != 1:
             node1 = successors[0]
             node2 = successors[1]
@@ -278,7 +297,6 @@ def debug_func_smt(func: dsa.Function) -> Tuple[FailureReason, source.NodeName, 
             not_taken_path_and_succ2 = not_taken_path.union(set([node2]))
             succ_node1_smtlib = smt.make_smtlib(prog, not_taken_path_and_succ1)
             succ_node2_smtlib = smt.make_smtlib(prog, not_taken_path_and_succ2)
-
 
             succ_node1_sat = get_sat(succ_node1_smtlib)
             succ_node2_sat = get_sat(succ_node2_smtlib)

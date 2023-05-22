@@ -78,45 +78,58 @@ def parse_type_builtin_mem() -> pc.Parser[source.Type]:
     return pc.pmap(ws(pc.string(smt.MEM_SORT)), lambda _: source.type_mem)
 
 
-def parse_type_builtin() -> pc.Parser[source.Type]:
-    return pc.choice([parse_type_builtin_mem(), parse_type_builtin_bool()])
+def parse_type_builtin_htd() -> pc.Parser[source.Type]:
+    return pc.pmap(ws(pc.string(smt.HTD)), lambda _: source.TypeBuiltin(source.Builtin.HTD))
 
-def parse_type_array() -> pc.Parser[source.Type]:
-    def fn(s: str) -> pc.ParseResult[source.TypeArray]:
+
+def parse_type_builtin() -> pc.Parser[source.Type]:
+    return pc.choice([parse_type_builtin_mem(), parse_type_builtin_htd(), parse_type_builtin_bool()])
+
+
+def parse_type_word_array() -> pc.Parser[source.Type]:
+    def fn(s: str) -> pc.ParseResult[source.TypeWordArray]:
 
         maybeTypeArray = pc.between(
-                ws(pc.char('(')), 
-                pc.compose(parse_type(), parse_type()), 
-                ws(pc.char(')'))
-            )(s)
-        
+            ws(pc.char('(')),
+            (pc.compose(ws(pc.string("Array")), pc.compose(
+                parse_type_bit_vec(), parse_type_bit_vec()))),
+            ws(pc.char(')'))
+        )(s)
+
         if isinstance(maybeTypeArray, pc.ParseError):
             return maybeTypeArray
-        typeArray, s = maybeTypeArray
+        strtypeArray, s = maybeTypeArray
+        _, typeArray = strtypeArray
+        indexBits, valueBits = typeArray
+
+        return (source.TypeWordArray(index_bits=indexBits.size, value_bits=valueBits.size), s)
+
     return fn
- 
+
+
 def parse_type() -> pc.Parser[source.Type]:
     return pc.choice([
         parse_type_bit_vec(),
         parse_type_builtin(),
-        parse_type_array(),
+        parse_type_word_array(),
     ])
 
 
 def parse_typed_arg() -> pc.Parser[source.ExprVarT[assume_prove.VarName]]:
 
     def fn(s: str) -> pc.ParseResult[source.ExprVarT[assume_prove.VarName]]:
-        maybeExprVar = pc.between(ws(pc.char('(')), 
-                   pc.compose(parse_identifier(), parse_type()), 
-                   ws(pc.char(')')))(s)
+        maybeExprVar = pc.between(ws(pc.char('(')),
+                                  pc.compose(parse_identifier(), parse_type()),
+                                  ws(pc.char(')')))(s)
         if isinstance(maybeExprVar, pc.ParseError):
-            return  maybeExprVar
+            return maybeExprVar
 
         exprVarTup, s = maybeExprVar
         ident, ty = exprVarTup
         return (source.ExprVar(typ=ty, name=assume_prove.VarName(ident)), s)
 
     return fn
+
 
 def parse_cmd_declare_fun() -> pc.Parser[smt.CmdDeclareFun]:
     def fn(s: str) -> pc.ParseResult[smt.CmdDeclareFun]:
@@ -190,15 +203,24 @@ def parse_cmd_declare_fun() -> pc.Parser[smt.CmdDeclareFun]:
 #     pass
 
 
-def parse_balanced_parens(lhs:int=0, res_str:str="") -> pc.Parser[str]:
+def parse_balanced_parens() -> pc.Parser[str]:
+    """ This function expects two types of string literals. 
+    Note the below grammar is a subset, we parse endTerm's here excluding the final ')'
+    Grammar: 
+        endTerm = term)
+        term = term | constant | (op term term) | (term)
+        op = + | - | * 
+        constant = num | hexnum 
+    """
     def fn(s: str) -> pc.ParseResult[str]:
-        nonlocal lhs
-        nonlocal res_str
+        res_str = ""
+        lhs = 0
         rhs = 0
-        # second conditional ensures entering loop
-        while (lhs != rhs) or (res_str == ""):
+        # Until parens are balanced or until next char is a ')'
+        while (lhs != rhs) or (len(s) >= 1 and s[0] != ')'):
             if len(s) <= 0:
                 return pc.ParseError(f"expected character but received EOF")
+            # print(f"lhs={lhs} rhs={rhs} s=<\"{s}\"> res_str=<\"{res_str}\">")
             c = s[0]
             if c == '(':
                 lhs += 1
@@ -209,13 +231,16 @@ def parse_balanced_parens(lhs:int=0, res_str:str="") -> pc.Parser[str]:
         return (res_str, s)
     return fn
 
+
 class CmdPartialDefineFun(tp.NamedTuple):
-    symbol: smt.Identifier 
+    symbol: smt.Identifier
     args: tp.Sequence[source.ExprVarT[assume_prove.VarName]]
-    ret_sort: source.Type 
-    term: str 
+    ret_sort: source.Type
+    term: str
 
 # Is there a better way to do this?
+
+
 def parse_cmd_define_fun() -> pc.Parser[CmdPartialDefineFun]:
     """ parse into a hybrid representation of CmdDefineFun. 
     This is needed because we can't parse Arrays into smt.ExprT """
@@ -241,7 +266,7 @@ def parse_cmd_define_fun() -> pc.Parser[CmdPartialDefineFun]:
                 pc.newline()
             ]))
         )(s)
-        
+
         if isinstance(maybeArgs, pc.ParseError):
             return maybeArgs
         (args, s) = maybeArgs
@@ -251,13 +276,19 @@ def parse_cmd_define_fun() -> pc.Parser[CmdPartialDefineFun]:
             return maybeRetSort
         (ret_sort, s) = maybeRetSort
 
-        maybeTerm = parse_balanced_parens(lhs=1)(s)
+        # Usually white space is pushed down but not in this instance
+        maybeTerm = ws(parse_balanced_parens())(s)
         if isinstance(maybeTerm, pc.ParseError):
             return maybeTerm
 
         (term, s) = maybeTerm
+        maybeParen = ws(pc.char(')'))(s)
+        if isinstance(maybeParen, pc.ParseError):
+            return maybeParen
+        (_, s) = maybeParen
         return (CmdPartialDefineFun(symbol=ident, args=args, ret_sort=ret_sort, term=term), s)
     return fn
+
 
 def inner_expr() -> pc.Parser[source.ExprT[assume_prove.VarName]]:
     return NotImplemented

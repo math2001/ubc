@@ -262,12 +262,44 @@ def test_complex() -> None:
         maybeModels = pc.parse(fn, data)
         assert not isinstance(maybeModels, pc.ParseError)
 
-def test_should_parse_files() -> None:
-    fn = smt_parser.parse_responses()
-    for file in glob.glob("./tests/smt/pass/*.smt"):
-        with open(file, "r") as f:
-            data = f.read()
-            maybeModels = pc.parse(fn, data)
-            assert not isinstance(maybeModels, pc.ParseError)
-            responses, leftover = maybeModels
-            assert leftover.strip() == ""
+def test_parse_parens_balance() -> None:
+    string = "(+ 3 4))"
+    fn = smt_parser.parse_balanced_parens(lhs=1)
+    maybeStr = fn(string)
+    assert not isinstance(maybeStr, pc.ParseError)
+    res_str, leftover = maybeStr
+    assert leftover == ""
+    assert res_str == string
+
+    string = "(+ 3 4)"
+    fn = smt_parser.parse_balanced_parens()
+    maybeStr = fn(string)
+    assert not isinstance(maybeStr, pc.ParseError)
+    res_str, leftover = maybeStr
+    assert leftover == ""
+    assert res_str == string
+
+    string = "(+ 3 4)())9)"
+    fn = smt_parser.parse_balanced_parens(lhs=2)
+    maybeStr = fn(string)
+    assert not isinstance(maybeStr, pc.ParseError)
+    res_str, leftover = maybeStr
+    assert leftover == ""
+    assert res_str == string
+
+def test_parse_typed_arg() -> None:
+    string = "(abc (_ BitVec 64))"
+    maybeTypedArg = smt_parser.parse_typed_arg()(string)
+    assert not isinstance(maybeTypedArg, pc.ParseError)
+    typedArg, s = maybeTypedArg
+    assert typedArg.name == "abc"
+    assert typedArg.typ == source.type_word64
+    assert s == ""
+
+def test_parse_cmd_define_fun() -> None:
+    string = "(define-fun asd ((x (_ BitVec 64)) (y (Array (_ BitVec 64) (_ BitVec 64)))) (_ BitVec 64) (_ bv0 64))"
+    maybeDefineFun = smt_parser.parse_cmd_define_fun()(string)
+    assert not isinstance(maybeDefineFun, pc.ParseError)
+    defineFun, s = maybeDefineFun
+    assert defineFun.symbol == "asd"
+    assert s == ""

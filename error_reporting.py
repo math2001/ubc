@@ -9,6 +9,7 @@ from provenance import *
 import nip
 import subprocess
 import textwrap
+import utils
 from dot_graph import pretty_expr, pretty_safe_expr, pretty_safe_update
 import smt_parser
 
@@ -219,7 +220,7 @@ def send_smtlib_model(smtlib: smt.SMTLIB, solver_type: smt.SolverType) -> smt.Re
     """Send command to any smt solver and returns a boolean per (check-sat)
     """
 
-    with smt.open_temp_file(suffix='.smt2') as (f, fullpath):
+    with utils.open_temp_file(suffix='.smt2') as (f, fullpath):
         f.write(smtlib)
         f.close()
         p = subprocess.Popen(smt.get_subprocess_file(
@@ -233,8 +234,8 @@ def send_smtlib_model(smtlib: smt.SMTLIB, solver_type: smt.SolverType) -> smt.Re
         sys.exit(1)
     lines = p.stdout.read().decode('utf-8')
     print(lines)
-    f = smt_parser.parse_responses()
-    res = f(lines)
+    fn = smt_parser.parse_responses()
+    res = fn(lines)
     print(res)
     exit(1)
 
@@ -263,7 +264,7 @@ def debug_func_smt(func: dsa.Function) -> Tuple[FailureReason, source.NodeName, 
             
             # used_node_name is optional because could not determine the reason
             used_node_name = extract_and_print_why(func, reason, node)
-            if used_node_name != None:
+            if used_node_name is not None:
                 used_node = func.nodes[used_node_name]
                 print(pretty_node(used_node))
             return (reason, node_name, used_node_name)

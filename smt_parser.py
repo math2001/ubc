@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 This module is a smt2 parser built upon a parser combinator library present in parser_combinator.py. 
 
@@ -80,13 +81,42 @@ def parse_type_builtin_mem() -> pc.Parser[source.Type]:
 def parse_type_builtin() -> pc.Parser[source.Type]:
     return pc.choice([parse_type_builtin_mem(), parse_type_builtin_bool()])
 
+def parse_type_array() -> pc.Parser[source.Type]:
+    def fn(s: str) -> pc.ParseResult[source.TypeArray]:
 
+        maybeTypeArray = pc.between(
+                ws(pc.char('(')), 
+                pc.compose(parse_type(), parse_type()), 
+                ws(pc.char(')'))
+            )(s)
+        
+        if isinstance(maybeTypeArray, pc.ParseError):
+            return maybeTypeArray
+        typeArray, s = maybeTypeArray
+    return fn
+ 
 def parse_type() -> pc.Parser[source.Type]:
     return pc.choice([
         parse_type_bit_vec(),
         parse_type_builtin(),
+        parse_type_array(),
     ])
 
+
+def parse_typed_arg() -> pc.Parser[source.ExprVarT[assume_prove.VarName]]:
+
+    def fn(s: str) -> pc.ParseResult[source.ExprVarT[assume_prove.VarName]]:
+        maybeExprVar = pc.between(ws(pc.char('(')), 
+                   pc.compose(parse_identifier(), parse_type()), 
+                   ws(pc.char(')')))(s)
+        if isinstance(maybeExprVar, pc.ParseError):
+            return  maybeExprVar
+
+        exprVarTup, s = maybeExprVar
+        ident, ty = exprVarTup
+        return (source.ExprVar(typ=ty, name=assume_prove.VarName(ident)), s)
+
+    return fn
 
 def parse_cmd_declare_fun() -> pc.Parser[smt.CmdDeclareFun]:
     def fn(s: str) -> pc.ParseResult[smt.CmdDeclareFun]:
@@ -128,10 +158,68 @@ def parse_cmd_declare_fun() -> pc.Parser[smt.CmdDeclareFun]:
         return (smt.CmdDeclareFun(ident, args, ret_sort), s)
     return fn
 
+# class SpecConstant(tp.NamedTuple):
+#     pass
 
 
-def parse_cmd_define_fun() -> pc.Parser[smt.CmdDefineFun]:
-    def fn(s: str) -> pc.ParseResult[smt.CmdDefineFun]:
+# def parse_spec_constant() -> pc.Parser[SpecConstant]:
+#     const = pc.choice([parse_num(source.type_word64)])
+#     pass
+
+# class AsIdentifier(tp.NamedTuple):
+#     pass
+
+# def parse_as_identifier() -> pc.Parser[AsIdentifier]:
+#     pass
+
+# QualIdentifier = smt.Identifier | AsIdentifier
+
+# def parse_qual_identifier() -> pc.Parser[QualIdentifier]:
+#     pass
+
+# class QualIdentifierTerms(tp.NamedTuple):
+#     terms: tp.Sequence[Term]
+
+# def parse_qual_identifier_terms() -> pc.Parser[QualIdentifierTerms]:
+#     pass
+
+# Term = SpecConstant | QualIdentifier  | QualIdentifierTerms
+
+
+# def parse_as_identifier() -> pc.Parser[AsIdentifier]:
+#     pass
+
+
+def parse_balanced_parens(lhs:int=0, res_str:str="") -> pc.Parser[str]:
+    def fn(s: str) -> pc.ParseResult[str]:
+        nonlocal lhs
+        nonlocal res_str
+        rhs = 0
+        # second conditional ensures entering loop
+        while (lhs != rhs) or (res_str == ""):
+            if len(s) <= 0:
+                return pc.ParseError(f"expected character but received EOF")
+            c = s[0]
+            if c == '(':
+                lhs += 1
+            elif c == ')':
+                rhs += 1
+            res_str += c
+            s = s[1:]
+        return (res_str, s)
+    return fn
+
+class CmdPartialDefineFun(tp.NamedTuple):
+    symbol: smt.Identifier 
+    args: tp.Sequence[source.ExprVarT[assume_prove.VarName]]
+    ret_sort: source.Type 
+    term: str 
+
+# Is there a better way to do this?
+def parse_cmd_define_fun() -> pc.Parser[CmdPartialDefineFun]:
+    """ parse into a hybrid representation of CmdDefineFun. 
+    This is needed because we can't parse Arrays into smt.ExprT """
+    def fn(s: str) -> pc.ParseResult[CmdPartialDefineFun]:
         maybeStart = pc.compose(
             ws(pc.char('(')), ws(pc.string("define-fun")))(s)
         if isinstance(maybeStart, pc.ParseError):
@@ -144,7 +232,7 @@ def parse_cmd_define_fun() -> pc.Parser[smt.CmdDefineFun]:
         (ident, s) = maybeIdent
         maybeArgs = pc.array(
             ws(pc.char('(')),
-            parse_type(),
+            parse_typed_arg(),
             ws(pc.char(')')),
             pc.many1(pc.choice([
                 pc.space(),
@@ -163,12 +251,13 @@ def parse_cmd_define_fun() -> pc.Parser[smt.CmdDefineFun]:
             return maybeRetSort
         (ret_sort, s) = maybeRetSort
 
-        maybeTerm: pc.ParseError | tp.Tuple[str, str] = NotImplemented
+        maybeTerm = parse_balanced_parens(lhs=1)(s)
         if isinstance(maybeTerm, pc.ParseError):
             return maybeTerm
 
         (term, s) = maybeTerm
-
+        return (CmdPartialDefineFun(symbol=ident, args=args, ret_sort=ret_sort, term=term), s)
+    return fn
 
 def inner_expr() -> pc.Parser[source.ExprT[assume_prove.VarName]]:
     return NotImplemented

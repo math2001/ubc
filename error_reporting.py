@@ -13,6 +13,10 @@ import utils
 import parser_combinator as pc
 from dot_graph import pretty_safe_expr, pretty_safe_update
 import smt_parser
+from rich.console import Console
+from rich.style import Style
+
+econsole = Console(stderr=True)
 
 # REVIEW: @mathieup do you reckon this should go in dsa.py. I am sick of having to type these all out completely.
 DSANode = source.Node[dsa.Incarnation[source.ProgVarName | nip.GuardVarName]]
@@ -20,7 +24,9 @@ DSAExprT = source.ExprT[dsa.Incarnation[source.ProgVarName | nip.GuardVarName]]
 
 
 def eprint(*args, **kwargs) -> None:  # type: ignore
-    print(*args, file=sys.stderr, **kwargs)
+    if "style" not in kwargs:
+        kwargs["style"] = "bold red"
+    econsole.print(*args, **kwargs)
 
 
 class OverflowFailure(NamedTuple):
@@ -256,7 +262,7 @@ def extract_and_print_why(func: dsa.Function, reason: FailureReason, node: DSANo
         return succ_succ_node_name
     elif isinstance(reason, UnknownFailure):
         eprint("got an unknown failure, try normalising the C code and running ubc again")
-        return
+        return None
     elif isinstance(reason, InvalidMemory):
         # TODO Depends on what we emit for memory ops
         assert False, "TODO"
@@ -272,9 +278,14 @@ def extract_and_print_why(func: dsa.Function, reason: FailureReason, node: DSANo
         assert_never(reason)
 
 
-def get_sat(smtlib: smt.SMTLIB) -> smt.CheckSatResult:
+def get_sat(smtlib: smt.SMTLIB) -> Tuple[bool, smt.CheckSatResult]:
     results = tuple(smt.send_smtlib(smtlib, smt.SolverCVC5()))
-    return results[-1]
+    sz = len(results)
+    assert sz >= 2
+    for i in range(0, sz-1):
+        if results[i] == smt.CheckSatResult.UNSAT:
+            return False, results[-1]
+    return True, results[-1]
 
 
 def pretty_node(node: source.Node[source.VarNameKind]) -> str:
@@ -336,7 +347,7 @@ def get_relevant_responses(node_vars: Set[source.ExprVarT[ap.VarName]], response
 
         for defFun in res:
             if defFun.symbol in rel_vars:
-                print(defFun)
+                eprint(defFun)
     pass
 
 
@@ -372,19 +383,21 @@ def debug_func_smt(func: dsa.Function) -> Tuple[FailureReason, source.NodeName, 
     prog = ap.make_prog(func)
     q: set[source.NodeName] = set([func.cfg.entry])
     not_taken_path: set[source.NodeName] = set([])
+    visited: set[source.NodeName] = set([])
     while len(q) != 0:
         node_name = q.pop()
-        print(node_name)
+        visited = visited.union(set([node_name]))
         node = func.nodes[node_name]
         not_taken_path_and_node = not_taken_path.union(set([node_name]))
         node_smtlib = smt.make_smtlib(prog, not_taken_path_and_node)
-        node_sat = get_sat(node_smtlib)
+        consistent, node_sat = get_sat(node_smtlib)
+        assert consistent
         # we do not care about the Err node
         successors = list(
             filter(lambda x: x != source.NodeNameErr, func.cfg.all_succs[node_name]))
         successors_smtlib = smt.make_smtlib(
             prog, not_taken_path.union(set(successors)))
-        successors_sat = get_sat(successors_smtlib)
+        _, successors_sat = get_sat(successors_smtlib)
         if successors_sat == smt.CheckSatResult.SAT and node_sat == smt.CheckSatResult.UNSAT:
             # This is our error node
             reason = determine_reason(node)
@@ -395,7 +408,7 @@ def debug_func_smt(func: dsa.Function) -> Tuple[FailureReason, source.NodeName, 
             if used_node_name is not None:
                 used_node = func.nodes[used_node_name]
                 used_node_as_ap = node_dsa_to_node_ap(used_node)
-                print(pretty_node(used_node_as_ap))
+                eprint(pretty_node(used_node_as_ap), style="magenta bold underline")
 
             succ_smtlib_with_model = smt.make_smtlib(
                 prog, not_taken_path.union(set(successors)), with_model=True)
@@ -425,12 +438,17 @@ def debug_func_smt(func: dsa.Function) -> Tuple[FailureReason, source.NodeName, 
             not_taken_path_and_succ2 = not_taken_path.union(set([node2]))
             succ_node1_smtlib = smt.make_smtlib(prog, not_taken_path_and_succ1)
             succ_node2_smtlib = smt.make_smtlib(prog, not_taken_path_and_succ2)
-
-            succ_node1_sat = get_sat(succ_node1_smtlib)
-            succ_node2_sat = get_sat(succ_node2_smtlib)
+            succ_node1_consistent, succ_node1_sat = get_sat(succ_node1_smtlib)
+            succ_node2_consistent, succ_node2_sat = get_sat(succ_node2_smtlib)
             if succ_node1_sat == smt.CheckSatResult.UNSAT and succ_node2_sat == smt.CheckSatResult.UNSAT:
+                if succ_node1_consistent:
+                    q = q.union(set([node1]))
+                elif succ_node2_consistent:
+                    q = q.union(set([node2]))
+                else:
+                    assert False, "one path has to be consistent"
                 # EDGE case take any path but do not add to not_taken_path
-                q = q.union(set(successors))
+                q = q.union(set([node1]))
             elif succ_node1_sat == smt.CheckSatResult.UNSAT and succ_node2_sat == smt.CheckSatResult.SAT:
                 q.add(node1)
                 not_taken_path.add(node2)

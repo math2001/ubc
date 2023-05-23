@@ -17,5 +17,6 @@ in pkgs.mkShell {
     pkgs.z3_4_11
     pkgs.cvc5
     pkgs.time
+    pkgs.chromium
   ];
 }

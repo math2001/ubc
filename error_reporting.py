@@ -1,7 +1,7 @@
 import sys
 import dsa
 import assume_prove as ap
-from typing import NamedTuple, Optional, Set, Tuple
+from typing import Callable, NamedTuple, Optional, Set, Tuple
 from typing_extensions import assert_never
 import source
 import smt
@@ -10,7 +10,8 @@ import nip
 import subprocess
 import textwrap
 import utils
-from dot_graph import pretty_expr, pretty_safe_expr, pretty_safe_update
+import parser_combinator as pc
+from dot_graph import pretty_safe_expr, pretty_safe_update
 import smt_parser
 
 # REVIEW: @mathieup do you reckon this should go in dsa.py. I am sick of having to type these all out completely.
@@ -30,6 +31,10 @@ class UnderflowFailure(NamedTuple):
     pass
 
 
+class OverOrUnderflowFailure(NamedTuple):
+    pass
+
+
 class UnknownFailure(NamedTuple):
     pass
 
@@ -46,7 +51,19 @@ class InvalidMemory(NamedTuple):
     pass
 
 
-FailureReason = OverflowFailure | UnderflowFailure | UnknownFailure | UnInitialised | UnAlignedMemory | InvalidMemory
+class NodeCallPreCondFailure(NamedTuple):
+    pass
+
+
+class LoopInvariantObligFailure(NamedTuple):
+    pass
+
+
+class FnPostCondFailure(NamedTuple):
+    pass
+
+
+FailureReason = OverflowFailure | UnderflowFailure | UnknownFailure | OverOrUnderflowFailure | UnInitialised | UnAlignedMemory | InvalidMemory | LoopInvariantObligFailure | NodeCallPreCondFailure | FnPostCondFailure
 
 
 def expr_common_arith() -> Set[source.Operator]:
@@ -83,6 +100,14 @@ def expr_all_subtract(e: DSAExprT) -> bool:
     return check_ops(e, allowed_ops)
 
 
+def expr_all_arith(e: DSAExprT) -> bool:
+    allowed_ops = {source.Operator.MINUS,
+                   source.Operator.PLUS,
+                   source.Operator.TIMES,
+                   source.Operator.DIVIDED_BY}.union(expr_common_arith())
+    return check_ops(e, allowed_ops)
+
+
 def expr_all_pointeralignops(e: DSAExprT) -> bool:
     # TODO: When we handle memory
     return False
@@ -109,11 +134,32 @@ def determine_reason(node: DSANode) -> FailureReason:
             return OverflowFailure()
         elif expr_all_subtract(node.expr):
             return UnderflowFailure()
+        elif expr_all_arith(node.expr):
+            return OverOrUnderflowFailure()
         elif expr_all_pointeralignops(node.expr):
             return UnAlignedMemory()
         elif expr_all_pointervalidops(node.expr):
             return InvalidMemory()
-    return UnknownFailure()
+    elif isinstance(node.origin, ProvenancePreCond):
+        assert False, "didn't expect to determine a pre cond node as the failure reason"
+    elif isinstance(node.origin, ProvenanceLoopInvariantObligation):
+        return LoopInvariantObligFailure()
+    elif isinstance(node.origin, ProvenanceNipUpdate):
+        assert False, "didn't expect to see a nip update as being the failure reason"
+    elif isinstance(node.origin, ProvenanceDSAJoiner):
+        assert False, "didn't expect to see dsa joiner as being the failure reason"
+    elif isinstance(node.origin, ProvenancePreCondFnObligation):
+        return NodeCallPreCondFailure()
+    elif isinstance(node.origin, ProvenancePostCondFnAssume):
+        assert False, "didn't expect to see a post condition assumption as being the failure reason"
+    elif isinstance(node.origin, ProvenanceLoopInvariantAssume):
+        assert False, "didn't expect to see a loop invariant assumption as being the failure reason"
+    elif isinstance(node.origin, ProvenancePostCond):
+        return FnPostCondFailure()
+    else:
+        assert_never(node.origin)
+    # make mypy happy
+    assert False, "shouldn't ever hit this"
 
 
 def print_reason(reason: FailureReason) -> None:
@@ -129,6 +175,14 @@ def print_reason(reason: FailureReason) -> None:
         eprint("unaligned memory")
     elif isinstance(reason, InvalidMemory):
         eprint("invalid memory")
+    elif isinstance(reason, OverOrUnderflowFailure):
+        eprint("invalid arithmetic causing overflow or underflow")
+    elif isinstance(reason, NodeCallPreCondFailure):
+        eprint("failed to satisfy function precondition")
+    elif isinstance(reason, LoopInvariantObligFailure):
+        eprint("failed to prove loop invariant")
+    elif isinstance(reason, FnPostCondFailure):
+        eprint("failed to prove function post condition")
     else:
         assert_never(reason)
 
@@ -173,10 +227,15 @@ def extract_and_print_why(func: dsa.Function, reason: FailureReason, node: DSANo
             eprint(
                 f"one of {variables} was uninitialised, refer to GraphLang at node {succ_node_name}")
         return succ_node_name
-    elif isinstance(reason, OverflowFailure | UnderflowFailure):
+    elif isinstance(reason, OverflowFailure | UnderflowFailure | OverOrUnderflowFailure):
         assert isinstance(node, source.NodeCond)
-        failure_str = "overflow" if isinstance(
-            reason, OverflowFailure) else "underflow"
+        failure_str = ""
+        if isinstance(reason, OverflowFailure):
+            failure_str = "overflow"
+        elif isinstance(reason, UnderflowFailure):
+            failure_str = "underflow"
+        else:
+            failure_str = "underflow or overflow"
         variables = list(map(human_var, source.used_variables_in_node(node)))
         succ_node_name = node.succ_then
         succ_node = func.nodes[succ_node_name]
@@ -196,10 +255,18 @@ def extract_and_print_why(func: dsa.Function, reason: FailureReason, node: DSANo
                    f"leads to an {failure_str} from some interleaving of arithmetic operation(s), refer to GraphLang at node {succ_succ_node_name}")
         return succ_succ_node_name
     elif isinstance(reason, UnknownFailure):
-        assert False, "Some condition wasn't handled"
+        eprint("got an unknown failure, try normalising the C code and running ubc again")
+        return
     elif isinstance(reason, InvalidMemory):
+        # TODO Depends on what we emit for memory ops
         assert False, "TODO"
     elif isinstance(reason, UnAlignedMemory):
+        assert False, "TODO"
+    elif isinstance(reason, LoopInvariantObligFailure):
+        assert False, "TODO"
+    elif isinstance(reason, NodeCallPreCondFailure):
+        assert False, "TODO"
+    elif isinstance(reason, FnPostCondFailure):
         assert False, "TODO"
     else:
         assert_never(reason)
@@ -210,7 +277,7 @@ def get_sat(smtlib: smt.SMTLIB) -> smt.CheckSatResult:
     return results[-1]
 
 
-def pretty_node(node: DSANode) -> str:
+def pretty_node(node: source.Node[source.VarNameKind]) -> str:
     """ This isn't great in a way, it doesn't print the proper graphlang name it uses the dot format for dsa names"""
     if isinstance(node, source.NodeBasic):
         return "\n".join(pretty_safe_update(u) for u in node.upds)
@@ -247,11 +314,58 @@ def send_smtlib_model(smtlib: smt.SMTLIB, solver_type: smt.SolverType) -> smt.Re
         print(textwrap.indent(p.stdout.read().decode('utf-8'), '   '))
         sys.exit(1)
     lines = p.stdout.read().decode('utf-8')
-    print(lines)
     fn = smt_parser.parse_responses()
     res = fn(lines)
-    print(res)
-    exit(1)
+    assert not isinstance(
+        res, pc.ParseError), "The smt parser doesn't handle the output here, only a small subset of SMT is parsed at the moment"
+    responses, _ = res
+    return responses
+
+
+def get_relevant_responses(node_vars: Set[source.ExprVarT[ap.VarName]], responses: smt.Responses) -> None:
+    lambda_fn: Callable[[smt.Identifier], bool] = lambda x: x != smt.identifier(
+        ap.node_ok_name(source.NodeNameErr))
+    rel_vars = set(filter(
+        lambda_fn,
+        map(lambda x: smt.identifier(x.name), node_vars)
+    )
+    )
+    for res in responses:
+        if isinstance(res, smt.CheckSatResponse):
+            continue
+
+        for defFun in res:
+            if defFun.symbol in rel_vars:
+                print(defFun)
+    pass
+
+
+def node_dsa_to_node_ap(node: DSANode) -> source.Node[ap.VarName]:
+    if isinstance(node, source.NodeEmpty):
+        return source.NodeEmpty(succ=node.succ)
+    elif isinstance(node, source.NodeBasic):
+        def convert_update(upd: source.Update[dsa.Incarnation[source.ProgVarName | nip.GuardVarName]]) -> source.Update[ap.VarName]:
+            new_var = ap.convert_expr_dsa_vars_to_ap(upd.var)
+            new_expr = ap.convert_expr_dsa_vars_to_ap(upd.expr)
+            return source.Update(var=new_var, expr=new_expr)
+        upds = tuple(map(convert_update, node.upds))
+        return source.NodeBasic(origin=node.origin, upds=upds, succ=node.succ)
+
+    elif isinstance(node, source.NodeAssume):
+        new_expr = ap.convert_expr_dsa_vars_to_ap(node.expr)
+        return source.NodeAssume(origin=node.origin, succ=node.succ, expr=new_expr)
+    elif isinstance(node, source.NodeAssert):
+        new_expr = ap.convert_expr_dsa_vars_to_ap(node.expr)
+        return source.NodeAssert(origin=node.origin, succ=node.succ, expr=new_expr)
+    elif isinstance(node, source.NodeCall):
+        args = tuple(map(ap.convert_expr_dsa_vars_to_ap, node.args))
+        rets = tuple(map(ap.convert_expr_dsa_vars_to_ap, node.rets))
+        return source.NodeCall(origin=node.origin, succ=node.succ, args=args, rets=rets, fname=node.fname)
+    elif isinstance(node, source.NodeCond):
+        new_expr = ap.convert_expr_dsa_vars_to_ap(node.expr)
+        return source.NodeCond(origin=node.origin, expr=new_expr, succ_then=node.succ_then, succ_else=node.succ_else)
+    else:
+        assert_never(node)
 
 
 def debug_func_smt(func: dsa.Function) -> Tuple[FailureReason, source.NodeName, Optional[source.NodeName]]:
@@ -273,11 +387,6 @@ def debug_func_smt(func: dsa.Function) -> Tuple[FailureReason, source.NodeName, 
         successors_sat = get_sat(successors_smtlib)
         if successors_sat == smt.CheckSatResult.SAT and node_sat == smt.CheckSatResult.UNSAT:
             # This is our error node
-            succ_smtlib_with_model = smt.make_smtlib(
-                prog, not_taken_path.union(set(successors)), with_model=True)
-            succ_model = tuple(send_smtlib_model(
-                succ_smtlib_with_model, smt.SolverZ3()))
-            print(succ_model)
             reason = determine_reason(node)
             print_reason(reason)
 
@@ -285,7 +394,26 @@ def debug_func_smt(func: dsa.Function) -> Tuple[FailureReason, source.NodeName, 
             used_node_name = extract_and_print_why(func, reason, node)
             if used_node_name is not None:
                 used_node = func.nodes[used_node_name]
-                print(pretty_node(used_node))
+                used_node_as_ap = node_dsa_to_node_ap(used_node)
+                print(pretty_node(used_node_as_ap))
+
+            succ_smtlib_with_model = smt.make_smtlib(
+                prog, not_taken_path.union(set(successors)), with_model=True)
+            succ_model = send_smtlib_model(
+                succ_smtlib_with_model, smt.SolverZ3())
+
+            # node_name_ok = ap.node_ok_name(node_name)
+            # assert node_name_ok in prog.nodes_script
+
+            # node_vars: Set[source.ExprVarT[ap.VarName]] = set([])
+            # for ins in prog.nodes_script[node_name_ok]:
+            #     node_vars = node_vars.union(source.all_vars_in_expr(ins.expr))
+
+            node_vars = set(
+                map(ap.convert_expr_var, source.used_variables_in_node(node)))
+            # need to get AP name
+            get_relevant_responses(node_vars, succ_model)
+
             return (reason, node_name, used_node_name)
 
         # When len(successors) == 1 and it is a NodeCond, it is because the succ_else path to NodeNameErr was trimmed

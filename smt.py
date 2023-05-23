@@ -124,8 +124,18 @@ EmptyLine = CmdComment('')
 
 Cmd = CmdDeclareFun | CmdDefineFun | CmdAssert | CmdCheckSat | CmdComment | CmdSetLogic | CmdDeclareSort | CmdGetModel
 
+# needed because we cannot parse Arrays.
+# This is fine because this parsing is only for error reporting
 
-ModelResponse: TypeAlias = CmdDefineFun
+
+class CmdPartialDefineFun(NamedTuple):
+    symbol: Identifier
+    args: Sequence[source.ExprVarT[assume_prove.VarName]]
+    ret_sort: source.Type
+    term: str
+
+
+ModelResponse = CmdDefineFun | CmdPartialDefineFun
 
 
 class CheckSatResponse(Enum):

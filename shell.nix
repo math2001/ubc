@@ -7,6 +7,7 @@ let
     ps.typing-extensions
     ps.mypy
     ps.autopep8
+    ps.rich
   ]);
 in pkgs.mkShell {
   packages = [

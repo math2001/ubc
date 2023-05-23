@@ -82,8 +82,12 @@ def parse_type_builtin_htd() -> pc.Parser[source.Type]:
     return pc.pmap(ws(pc.string(smt.HTD)), lambda _: source.TypeBuiltin(source.Builtin.HTD))
 
 
+def parse_type_builtin_pms() -> pc.Parser[source.Type]:
+    return pc.pmap(ws(pc.string(smt.PMS)), lambda _: source.TypeBuiltin(source.Builtin.PMS))
+
+
 def parse_type_builtin() -> pc.Parser[source.Type]:
-    return pc.choice([parse_type_builtin_mem(), parse_type_builtin_htd(), parse_type_builtin_bool()])
+    return pc.choice([parse_type_builtin_mem(), parse_type_builtin_htd(), parse_type_builtin_pms(), parse_type_builtin_bool()])
 
 
 def parse_type_word_array() -> pc.Parser[source.Type]:
@@ -113,22 +117,6 @@ def parse_type() -> pc.Parser[source.Type]:
         parse_type_builtin(),
         parse_type_word_array(),
     ])
-
-
-def parse_typed_arg() -> pc.Parser[source.ExprVarT[assume_prove.VarName]]:
-
-    def fn(s: str) -> pc.ParseResult[source.ExprVarT[assume_prove.VarName]]:
-        maybeExprVar = pc.between(ws(pc.char('(')),
-                                  pc.compose(parse_identifier(), parse_type()),
-                                  ws(pc.char(')')))(s)
-        if isinstance(maybeExprVar, pc.ParseError):
-            return maybeExprVar
-
-        exprVarTup, s = maybeExprVar
-        ident, ty = exprVarTup
-        return (source.ExprVar(typ=ty, name=assume_prove.VarName(ident)), s)
-
-    return fn
 
 
 def parse_cmd_declare_fun() -> pc.Parser[smt.CmdDeclareFun]:
@@ -232,19 +220,13 @@ def parse_balanced_parens() -> pc.Parser[str]:
     return fn
 
 
-class CmdPartialDefineFun(tp.NamedTuple):
-    symbol: smt.Identifier
-    args: tp.Sequence[source.ExprVarT[assume_prove.VarName]]
-    ret_sort: source.Type
-    term: str
-
 # Is there a better way to do this?
 
 
-def parse_cmd_define_fun() -> pc.Parser[CmdPartialDefineFun]:
+def parse_cmd_define_fun_partial() -> pc.Parser[smt.CmdPartialDefineFun]:
     """ parse into a hybrid representation of CmdDefineFun. 
     This is needed because we can't parse Arrays into smt.ExprT """
-    def fn(s: str) -> pc.ParseResult[CmdPartialDefineFun]:
+    def fn(s: str) -> pc.ParseResult[smt.CmdPartialDefineFun]:
         maybeStart = pc.compose(
             ws(pc.char('(')), ws(pc.string("define-fun")))(s)
         if isinstance(maybeStart, pc.ParseError):
@@ -257,7 +239,7 @@ def parse_cmd_define_fun() -> pc.Parser[CmdPartialDefineFun]:
         (ident, s) = maybeIdent
         maybeArgs = pc.array(
             ws(pc.char('(')),
-            parse_typed_arg(),
+            parse_sorted_var(),
             ws(pc.char(')')),
             pc.many1(pc.choice([
                 pc.space(),
@@ -286,7 +268,7 @@ def parse_cmd_define_fun() -> pc.Parser[CmdPartialDefineFun]:
         if isinstance(maybeParen, pc.ParseError):
             return maybeParen
         (_, s) = maybeParen
-        return (CmdPartialDefineFun(symbol=ident, args=args, ret_sort=ret_sort, term=term), s)
+        return (smt.CmdPartialDefineFun(symbol=ident, args=args, ret_sort=ret_sort, term=term), s)
     return fn
 
 
@@ -363,8 +345,8 @@ def parse_sorted_var() -> pc.Parser[source.ExprVarT[assume_prove.VarName]]:
     )
 
 
-def parse_model_response() -> pc.Parser[smt.ModelResponse]:
-    def fn(s: str) -> pc.ParseResult[smt.ModelResponse]:
+def parse_cmd_define_fun() -> pc.Parser[smt.CmdDefineFun]:
+    def fn(s: str) -> pc.ParseResult[smt.CmdDefineFun]:
         maybeStart = pc.compose(
             ws(pc.char('(')), ws(pc.string("define-fun")))(s)
         if isinstance(maybeStart, pc.ParseError):
@@ -406,8 +388,12 @@ def parse_model_response() -> pc.Parser[smt.ModelResponse]:
         if isinstance(maybeParen, pc.ParseError):
             return maybeParen
         (_, s) = maybeParen
-        return (smt.ModelResponse(symbol=ident, args=args, ret_sort=ret_sort, term=expr), s)
+        return (smt.CmdDefineFun(symbol=ident, args=args, ret_sort=ret_sort, term=expr), s)
     return fn
+
+
+def parse_model_response() -> pc.Parser[smt.ModelResponse]:
+    return pc.choice([parse_cmd_define_fun(), parse_cmd_define_fun_partial()])
 
 
 def parse_get_model_response() -> pc.Parser[smt.GetModelResponse]:

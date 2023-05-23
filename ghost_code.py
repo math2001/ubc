@@ -195,7 +195,7 @@ def sprinkle_precondition(func: nip.Function) -> Iterable[Insertion]:
     assert isinstance(entry_node, source.NodeEmpty)
 
     yield Insertion(node_name=source.NodeName('pre_condition'),
-                    origin=ProvenanceUnknown(),
+                    origin=ProvenancePreCond(),
                     after=func.cfg.entry,
                     before=entry_node.succ,
                     kind=K.PRECONDITION_ASSUMPTION,
@@ -207,7 +207,7 @@ def sprinkle_postcondition(func: nip.Function) -> Iterable[Insertion]:
                                                               "where the Err node has multiple predecessors")
     pred = func.cfg.all_preds[source.NodeNameRet][0]
     yield Insertion(node_name=source.NodeName('post_condition'),
-                    origin=ProvenanceUnknown(),
+                    origin=ProvenancePostCond(),
                     after=pred,
                     before=source.NodeNameRet,
                     kind=K.POST_CONDITION_PROOF_OBLIGATION,
@@ -235,7 +235,7 @@ def sprinkle_loop_invariant(func: nip.Function, lh: source.LoopHeaderName) -> It
     # ALL predecessors, including predecessors that follow a back edge
     for i, pred in enumerate(func.cfg.all_preds[lh], start=1):
         yield Insertion(node_name=source.NodeName(f'loop_{lh}_latch_{i}'),
-                        origin=ProvenanceUnknown(),
+                        origin=ProvenanceLoopInvariantObligation(),
                         after=pred,
                         before=lh,
                         kind=K.NODE_LOOP_INVARIANT_PROOF_OBLIGATION,
@@ -243,7 +243,7 @@ def sprinkle_loop_invariant(func: nip.Function, lh: source.LoopHeaderName) -> It
 
     for i, succ in enumerate(func.cfg.all_succs[lh], start=1):
         yield Insertion(node_name=source.NodeName(f'loop_{lh}_inv_asm_{i}'),
-                        origin=ProvenanceUnknown(),
+                        origin=ProvenanceLoopInvariantAssume(),
                         after=lh,
                         before=succ,
                         kind=K.NODE_LOOP_INVARIANT_ASSUMPTION,
@@ -257,11 +257,11 @@ def sprinkle_loop_invariants(func: nip.Function) -> Iterable[Insertion]:
 
 def sprinkle_call_assert_preconditions(fn: nip.Function, name: source.NodeName, precond: source.ExprT[source.ProgVarName | nip.GuardVarName]) -> Iterable[Insertion]:
     for pred in fn.cfg.all_preds[name]:
-        yield Insertion(node_name=source.NodeName(f"prove_{pred}_{name}"), after=pred, before=name, kind=K.NODE_PRE_CONDITION_OBLIGATION_FNCALL, expr=precond, origin=ProvenanceUnknown())
+        yield Insertion(node_name=source.NodeName(f"prove_{pred}_{name}"), after=pred, before=name, kind=K.NODE_PRE_CONDITION_OBLIGATION_FNCALL, expr=precond, origin=ProvenancePreCondFnObligation())
 
 
 def sprinkle_call_assume_postcondition(name: source.NodeName, node: source.NodeCall[Any], postcond: source.ExprT[source.ProgVarName | nip.GuardVarName]) -> Insertion:
-    return Insertion(node_name=source.NodeName(f"assume_postcond_{name}_{node.succ}"), after=name, before=node.succ, kind=K.NODE_ASSUME_POST_CONDITION_FNCALL, expr=postcond, origin=ProvenanceUnknown())
+    return Insertion(node_name=source.NodeName(f"assume_postcond_{name}_{node.succ}"), after=name, before=node.succ, kind=K.NODE_ASSUME_POST_CONDITION_FNCALL, expr=postcond, origin=ProvenancePostCondFnAssume())
 
 
 def unify_preconds(raw_precondition: source.ExprT[source.HumanVarName], args: Tuple[source.ExprT[source.VarNameKind], ...], expected_args: Tuple[source.ExprVarT[source.ProgVarName], ...]) -> Tuple[Dict[source.ExprVarT[source.HumanVarName], source.ExprT[source.VarNameKind]], source.ExprT[source.VarNameKind]]:

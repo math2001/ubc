@@ -5,16 +5,6 @@ class ProvenanceGraphLang(NamedTuple):
     pass
 
 
-class ProvenancePrelude(NamedTuple):
-    source: str
-    col: int
-    row: int
-
-
-class ProvenanceGhost(NamedTuple):
-    pass
-
-
 class ProvenanceNipGuard(NamedTuple):
     pass
 
@@ -26,11 +16,29 @@ class ProvenanceNipUpdate(NamedTuple):
 class ProvenanceDSAJoiner(NamedTuple):
     pass
 
-# TODO: deal with this when we have proper handling of universe variables
 
-
-class ProvenanceUnknown(NamedTuple):
+class ProvenancePreCondFnObligation(NamedTuple):
     pass
 
 
-Provenance = ProvenanceGraphLang | ProvenancePrelude | ProvenanceGhost | ProvenanceNipGuard | ProvenanceNipUpdate | ProvenanceDSAJoiner | ProvenanceUnknown
+class ProvenancePostCondFnAssume(NamedTuple):
+    pass
+
+
+class ProvenancePreCond(NamedTuple):
+    pass
+
+
+class ProvenancePostCond(NamedTuple):
+    pass
+
+
+class ProvenanceLoopInvariantAssume(NamedTuple):
+    pass
+
+
+class ProvenanceLoopInvariantObligation(NamedTuple):
+    pass
+
+
+Provenance = ProvenanceGraphLang | ProvenanceNipGuard | ProvenanceNipUpdate | ProvenanceDSAJoiner | ProvenancePreCond | ProvenancePreCondFnObligation | ProvenancePostCondFnAssume | ProvenanceLoopInvariantAssume | ProvenanceLoopInvariantObligation | ProvenancePostCond

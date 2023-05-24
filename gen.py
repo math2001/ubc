@@ -477,10 +477,12 @@ PD = gen_nonrec_data_type('PD', {f'PD{i:02}': () for i in range(
     62 + 1)}, assign_values_to_constructors=True)
 Ch = gen_nonrec_data_type('Ch', {f'Ch{i:02}': () for i in range(
     62 + 1)}, assign_values_to_constructors=True)
-Word64 = ExternType(name='Word64', bit_size=64)
-Word16 = ExternType(name='Word16', bit_size=16)
-print('(define-sort Word64 () (_ BitVec 64))')
-print('(define-sort Word16 () (_ BitVec 16))')
+# Word64 = ExternType(name='Word64', bit_size=64)
+# Word16 = ExternType(name='Word16', bit_size=16)
+MsgInfo_Label = ExternType(name='MsgInfo_Label', bit_size=52)
+MsgInfo_Count = ExternType(name='MsgInfo_Count', bit_size=12)
+print('(define-sort MsgInfo_Label () (_ BitVec 52))')
+print('(define-sort MsgInfo_Count () (_ BitVec 12))')
 print()
 
 Set_Ch = gen_set_type(Ch)
@@ -489,20 +491,28 @@ Set_Ch = gen_set_type(Ch)
 #   { mi_label :: Word64
 #   , mi_count :: Word16
 #   } deriving (Eq, Show)
+#
+# This type is misleading!! See the spec
 MsgInfo = gen_composite_type('MsgInfo', 'MI', {
-    'label': Word64,
-    'count': Word16
+    'label': MsgInfo_Label,
+    'count': MsgInfo_Count
 })
 Prod_Ch_MsgInfo = gen_prod_type(Ch, MsgInfo)
+
+SeL4_Ntfn = ExternType(name='SeL4_Ntfn', bit_size=64)
+print('(define-sort SeL4_Ntfn () (_ BitVec 64))')
+
+Prod_MsgInfo_SeL4_Ntf = gen_prod_type(MsgInfo, SeL4_Ntfn)
+KernelOracle = gen_maybe_type(Prod_MsgInfo_SeL4_Ntf)
 
 # data NextRecv
 #   = NR_Notification (Set Ch)
 #   | NR_PPCall (Ch, MsgInfo)
 #   | NR_Unknown
 NextRecv = gen_nonrec_data_type('NextRecv', {
-    'Notification': (Set_Ch, ),
-    'PPCall': (Prod_Ch_MsgInfo, ),
-    'Unknown': ()
+    'NR_Notification': (Set_Ch, ),
+    'NR_PPCall': (Prod_Ch_MsgInfo, ),
+    'NR_Unknown': ()
 })
 Maybe_MsgInfo = gen_maybe_type(MsgInfo)
 Maybe_Prod_Ch_MsgInfo = gen_maybe_type(Prod_Ch_MsgInfo)
@@ -526,11 +536,22 @@ pc = gen_composite_type('PlatformContext', 'LC', {
     'lc_unhandled_reply': Maybe_MsgInfo,
     'lc_last_handled_reply': Maybe_MsgInfo
 })
-
-print(define_fun('C_channel_to_SMT_channel', ('(cc (_ BitVec 64))', ),
+print(define_fun('C_channel_to_SMT_channel', ('(cc (_ BitVec 32))', ),
                  Ch.name, extract('cc', Ch.bit_size - 1, 0)))
-print(define_fun('C_channel_valid', ('(cc (_ BitVec 64))', ),
-                 'Bool', f'(bvule cc (_ bv62 64))'))  # < or <=
+print(define_fun('C_channel_valid', ('(cc (_ BitVec 32))', ),
+                 'Bool', f'(bvule cc (_ bv62 32))'))
+
+# the bit field is packed
+print(define_fun('C_msg_info_to_SMT_msg_info', ('(mi (_ BitVec 64))', ),
+                 'MsgInfo', f'mi'))
+
+print('; to compare msg info, just use equality, all the bits are significant')
+print('; only compares the label field')
+
+
+def bv(size: int) -> str:
+    return f'(_ BitVec {size})'
+
 
 print("; end of prelude")
 

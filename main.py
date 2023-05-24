@@ -1,5 +1,6 @@
 from enum import Enum, unique
 from typing import Collection, Sequence, Tuple, Any, Dict
+import argparse
 
 import sys
 import os
@@ -110,7 +111,7 @@ def find_functions_by_name(function_names: Collection[str], target: str) -> str:
     return selected
 
 
-def run(filename: str, function_names: Collection[str], options: Collection[CmdlineOption]) -> None:
+def run(filename: str, function_names: Collection[str], options: Collection[CmdlineOption], args: argparse.Namespace) -> None:
     if filename.lower() == 'dsa':
         filename = 'examples/dsa.txt'
     elif filename.lower() == 'kernel':
@@ -246,6 +247,22 @@ def debug() -> None:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("file", type=str, help="GraphLang file to use")
+    parser.add_argument("-g", "--show-graph", type=bool, help="Show the graph lang", default=False)
+    parser.add_argument("-n", "--show-nip", type=bool, help="Show the nip stage", default=False)
+    parser.add_argument("-gh", "--show-ghost", type=bool, help="Show the ghost stage", default=False)
+    parser.add_argument("-d", "--show-dsa", type=bool, help="Show the graph after having applied dynamic single assignment", default=False)
+    parser.add_argument("-s", "--show-smt", type=bool, help="Show the SMT given to the solvers", default=False)
+    parser.add_argument("-r", "--show-sats", type=bool, help="Show the raw results from the smt solvers", default=False)
+    parser.add_argument("-p", "--preludes", default=[], nargs="+") 
+    args = parser.parse_args()
+
+    for file in args.preludes:
+        if not os.path.isfile(file):
+            print(f"{file} does not exist")
+            exit(1)
+
     if '--help' in sys.argv or '-h' in sys.argv or len(sys.argv) == 1:
         usage()
 
@@ -272,7 +289,7 @@ def main() -> None:
 
     filename = function_names[0]
     function_names = function_names[1:]
-    run(filename, function_names, options)
+    run(filename, function_names, options, args)
 
 
 if __name__ == "__main__":

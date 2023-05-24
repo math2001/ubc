@@ -13,8 +13,8 @@ import utils
 import parser_combinator as pc
 from dot_graph import pretty_safe_expr, pretty_safe_update
 import smt_parser
+import ghost_code
 from rich.console import Console
-from rich.style import Style
 
 econsole = Console(stderr=True)
 
@@ -146,6 +146,8 @@ def determine_reason(node: DSANode) -> FailureReason:
             return UnAlignedMemory()
         elif expr_all_pointervalidops(node.expr):
             return InvalidMemory()
+        else:
+            return UnknownFailure()
     elif isinstance(node.origin, ProvenancePreCond):
         assert False, "didn't expect to determine a pre cond node as the failure reason"
     elif isinstance(node.origin, ProvenanceLoopInvariantObligation):
@@ -164,8 +166,6 @@ def determine_reason(node: DSANode) -> FailureReason:
         return FnPostCondFailure()
     else:
         assert_never(node.origin)
-    # make mypy happy
-    assert False, "shouldn't ever hit this"
 
 
 def print_reason(reason: FailureReason) -> None:
@@ -174,15 +174,15 @@ def print_reason(reason: FailureReason) -> None:
     elif isinstance(reason, UnknownFailure):
         eprint("unable to determine failure reason")
     elif isinstance(reason, UnderflowFailure):
-        eprint("variable underflows")
+        eprint("hint: variable likely underflows")
     elif isinstance(reason, OverflowFailure):
-        eprint("variable overflows")
+        eprint("hint: variable likely overflows")
     elif isinstance(reason, UnAlignedMemory):
         eprint("unaligned memory")
     elif isinstance(reason, InvalidMemory):
         eprint("invalid memory")
     elif isinstance(reason, OverOrUnderflowFailure):
-        eprint("invalid arithmetic causing overflow or underflow")
+        eprint("hint: likely invalid arithmetic causing overflow or underflow")
     elif isinstance(reason, NodeCallPreCondFailure):
         eprint("failed to satisfy function precondition")
     elif isinstance(reason, LoopInvariantObligFailure):
@@ -271,9 +271,19 @@ def extract_and_print_why(func: dsa.Function, reason: FailureReason, node: DSANo
     elif isinstance(reason, LoopInvariantObligFailure):
         assert False, "TODO"
     elif isinstance(reason, NodeCallPreCondFailure):
-        assert False, "TODO"
+        assert isinstance(node, ghost_code.NodePrecondObligationFnCall)
+        succ_node_name = node.succ
+        succ_node = func.nodes[succ_node_name]
+        assert isinstance(succ_node, source.NodeCall)
+        eprint(
+            f"call to function {succ_node.fname} did not satisfy it's preconditions")
+        return succ_node_name
     elif isinstance(reason, FnPostCondFailure):
-        assert False, "TODO"
+        assert isinstance(node, ghost_code.NodePostConditionProofObligation)
+        eprint(
+            f"function {func.name}'s post condition was not able to be proven")
+        # no such thing as a use here
+        return None
     else:
         assert_never(reason)
 
@@ -392,9 +402,9 @@ def debug_func_smt(func: dsa.Function) -> Tuple[FailureReason, source.NodeName, 
         node_smtlib = smt.make_smtlib(prog, not_taken_path_and_node)
         consistent, node_sat = get_sat(node_smtlib)
         assert consistent
-        # we do not care about the Err node
+        # we do not care about the Err and Ret node
         successors = list(
-            filter(lambda x: x != source.NodeNameErr, func.cfg.all_succs[node_name]))
+            filter(lambda x: x != source.NodeNameErr and x != source.NodeNameRet and ((node_name, x) not in func.cfg.back_edges), func.cfg.all_succs[node_name]))
         successors_smtlib = smt.make_smtlib(
             prog, not_taken_path.union(set(successors)))
         _, successors_sat = get_sat(successors_smtlib)
@@ -408,23 +418,22 @@ def debug_func_smt(func: dsa.Function) -> Tuple[FailureReason, source.NodeName, 
             if used_node_name is not None:
                 used_node = func.nodes[used_node_name]
                 used_node_as_ap = node_dsa_to_node_ap(used_node)
-                eprint(pretty_node(used_node_as_ap), style="magenta bold underline")
+
+                eprint("HINT: SUSPECTED STATEMENT",
+                       justify="center", style="red on white")
+                eprint(pretty_node(used_node_as_ap), style="magenta bold")
 
             succ_smtlib_with_model = smt.make_smtlib(
                 prog, not_taken_path.union(set(successors)), with_model=True)
             succ_model = send_smtlib_model(
                 succ_smtlib_with_model, smt.SolverZ3())
 
-            # node_name_ok = ap.node_ok_name(node_name)
-            # assert node_name_ok in prog.nodes_script
-
-            # node_vars: Set[source.ExprVarT[ap.VarName]] = set([])
-            # for ins in prog.nodes_script[node_name_ok]:
-            #     node_vars = node_vars.union(source.all_vars_in_expr(ins.expr))
-
             node_vars = set(
                 map(ap.convert_expr_var, source.used_variables_in_node(node)))
+
             # need to get AP name
+            eprint("VARIABLES USED IN ASSERTION",
+                   justify="center", style="red on white")
             get_relevant_responses(node_vars, succ_model)
 
             return (reason, node_name, used_node_name)

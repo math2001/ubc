@@ -103,6 +103,11 @@ def ret_value(v: source.ExprVarT[source.VarNameKind]) -> source.ExprVarT[source.
 
 
 universe = {
+    "tests/errors/errors.txt": {
+        "tmp.private_hello": source.Ghost(loop_invariants={}, precondition=eq(i32v("hx"), i32(45)), postcondition=T),
+        "tmp.add1": source.Ghost(loop_invariants={}, precondition=eq(i32v("x"), i32(100)), postcondition=(eq(i32ret, i32(101))))
+
+    },
     "tests/all.txt": {
         # 3 <= i ==> a = 1
         # 3:w32 <=s i:w32 ==> a:w32 = 1:w32

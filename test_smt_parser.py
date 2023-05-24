@@ -364,6 +364,7 @@ def test_parse_model_response() -> None:
     assert defineFun.term == "(_ bv0 64)"
     assert s == ""
 
+
 def test_should_parse_files() -> None:
     fn = smt_parser.parse_responses()
     for file in glob.glob("./tests/smt/pass/*.smt"):

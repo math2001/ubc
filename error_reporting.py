@@ -210,12 +210,13 @@ def human_var(src: source.ExprVarT[dsa.Incarnation[source.ProgVarName | nip.Guar
     return human_varname[0]
 
 
-def extract_and_print_why(func: dsa.Function, reason: FailureReason, node: DSANode) -> Optional[source.NodeName]:
+def extract_and_print_why(func: dsa.Function, reason: FailureReason, node: DSANode, node_name: source.NodeName) -> Optional[source.NodeName]:
     """Prints debug information for the user and returns the NodeName in which a use caused an assertion to fail
 
     :param func: Function we are error reporting on, needed for context information. 
     :param reason: Used to determine what kind of extraction and additional checking needs to be done to print a verbose error message
     :param node: The node (always a prove Node) that caused SAT.
+    :param node_name: The name of @node
 
     :return: A successive node name which indicates which use caused the node (parameter) to fail
     """
@@ -269,7 +270,10 @@ def extract_and_print_why(func: dsa.Function, reason: FailureReason, node: DSANo
     elif isinstance(reason, UnAlignedMemory):
         assert False, "TODO"
     elif isinstance(reason, LoopInvariantObligFailure):
-        assert False, "TODO"
+        assert isinstance(node, ghost_code.NodeLoopInvariantProofObligation)
+        eprint(
+            f"The loop invariant proof obligation at node {node_name} was not met")
+        return None
     elif isinstance(reason, NodeCallPreCondFailure):
         assert isinstance(node, ghost_code.NodePrecondObligationFnCall)
         succ_node_name = node.succ
@@ -414,7 +418,8 @@ def debug_func_smt(func: dsa.Function) -> Tuple[FailureReason, source.NodeName, 
             print_reason(reason)
 
             # used_node_name is optional because could not determine the reason
-            used_node_name = extract_and_print_why(func, reason, node)
+            used_node_name = extract_and_print_why(
+                func, reason, node, node_name)
             if used_node_name is not None:
                 used_node = func.nodes[used_node_name]
                 used_node_as_ap = node_dsa_to_node_ap(used_node)

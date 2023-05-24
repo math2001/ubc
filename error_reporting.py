@@ -412,6 +412,7 @@ def debug_func_smt(func: dsa.Function) -> Tuple[FailureReason, source.NodeName, 
             prog, not_taken_path.union(set(successors)))
         _, successors_sat = get_sat(successors_smtlib)
         if successors_sat == smt.CheckSatResult.SAT and node_sat == smt.CheckSatResult.UNSAT:
+            eprint("ERROR REPORTING", style="red on white", justify="center")
             # This is our error node
             reason = determine_reason(node)
             print_reason(reason)
@@ -419,6 +420,9 @@ def debug_func_smt(func: dsa.Function) -> Tuple[FailureReason, source.NodeName, 
             # used_node_name is optional because could not determine the reason
             used_node_name = extract_and_print_why(
                 func, reason, node, node_name)
+            eprint("FAILING ASSERTION", style="red on white", justify="center")
+            node_as_ap = node_dsa_to_node_ap(node)
+            eprint("ASSERT", pretty_node(node_as_ap))
             if used_node_name is not None:
                 used_node = func.nodes[used_node_name]
                 used_node_as_ap = node_dsa_to_node_ap(used_node)

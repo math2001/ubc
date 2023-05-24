@@ -362,7 +362,6 @@ def get_relevant_responses(node_vars: Set[source.ExprVarT[ap.VarName]], response
         for defFun in res:
             if defFun.symbol in rel_vars:
                 eprint(defFun)
-    pass
 
 
 def node_dsa_to_node_ap(node: DSANode) -> source.Node[ap.VarName]:

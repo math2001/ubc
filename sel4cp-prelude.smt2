@@ -274,7 +274,7 @@
 (define-fun Ch_set_union ((s1 Ch_set) (s2 Ch_set)) Ch_set (bvor s1 s2))
 (define-fun Ch_set_has ((s Ch_set) (x Ch)) Bool (bvult (_ bv0 64) (bvand s (Ch_set_singleton x))))
 (define-fun Ch_set_add ((s Ch_set) (x Ch)) Ch_set (Ch_set_union s (Ch_set_singleton x)))
-(define-fun Ch_set_remove ((s Ch_set) (x Ch)) Ch_set (Ch_set_intersection s (Ch_set_singleton x)))
+(define-fun Ch_set_remove ((s Ch_set) (x Ch)) Ch_set (Ch_set_intersection s (bvnot (Ch_set_singleton x))))
 
 ; data MsgInfo = MI
 ;   { label :: MsgInfo_Label
@@ -378,4 +378,9 @@
 (define-fun C_msg_info_to_SMT_msg_info ((mi (_ BitVec 64))) MsgInfo mi)
 ; to compare msg info, just use equality, all the bits are significant
 ; only compares the label field
+
+(declare-fun lc_arbitrary_1 () (_ BitVec 407))
+(declare-fun lc_arbitrary_2 () (_ BitVec 407))
+(declare-fun lc_arbitrary_3 () (_ BitVec 407))
+(declare-fun lc_arbitrary_4 () (_ BitVec 407))
 ; end of prelude

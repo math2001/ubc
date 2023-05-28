@@ -111,7 +111,7 @@ def find_functions_by_name(function_names: Collection[str], target: str) -> str:
     return selected
 
 
-def run(filename: str, function_names: Collection[str], options: Collection[CmdlineOption], args: argparse.Namespace) -> None:
+def run(filename: str, function_names: Collection[str], options: Collection[CmdlineOption], preludes: Sequence[str]) -> None:
     if filename.lower() == 'dsa':
         filename = 'examples/dsa.txt'
     elif filename.lower() == 'kernel':
@@ -168,7 +168,7 @@ def run(filename: str, function_names: Collection[str], options: Collection[Cmdl
         if CmdlineOption.SHOW_AP in options:
             assume_prove.pretty_print_prog(prog)
 
-        smtlib = smt.make_smtlib(prog)
+        smtlib = smt.make_smtlib(prog, preludes)
         if CmdlineOption.SHOW_SMT in options:
             if CmdlineOption.SHOW_LINE_NUMBERS in options:
                 lines = smtlib.splitlines()
@@ -249,19 +249,32 @@ def debug() -> None:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("file", type=str, help="GraphLang file to use")
-    parser.add_argument("-g", "--show-graph", type=bool, help="Show the graph lang", default=False)
-    parser.add_argument("-n", "--show-nip", type=bool, help="Show the nip stage", default=False)
-    parser.add_argument("-gh", "--show-ghost", type=bool, help="Show the ghost stage", default=False)
-    parser.add_argument("-d", "--show-dsa", type=bool, help="Show the graph after having applied dynamic single assignment", default=False)
-    parser.add_argument("-s", "--show-smt", type=bool, help="Show the SMT given to the solvers", default=False)
-    parser.add_argument("-r", "--show-sats", type=bool, help="Show the raw results from the smt solvers", default=False)
-    parser.add_argument("-p", "--preludes", default=[], nargs="+") 
+    parser.add_argument("fnames", default=[], nargs='*')
+    parser.add_argument("-g", "--show-graph", help="Show the graph lang",
+                        default=False, action="store_true")
+    parser.add_argument("-n", "--show-nip", help="Show the nip stage",
+                        default=False, action="store_true")
+    parser.add_argument("-gh", "--show-ghost",
+                        help="Show the ghost stage", default=False, action="store_true")
+    parser.add_argument("-d", "--show-dsa", help="Show the graph after having applied dynamic single assignment",
+                        default=False, action="store_true")
+    parser.add_argument("-a", "--show-ap", help="Show the assume prove prog",
+                        default=False, action="store_true")
+    parser.add_argument("-s", "--show-smt", help="Show the SMT given to the solvers",
+                        default=False, action="store_true")
+    parser.add_argument("-r", "--show-sats", help="Show the raw results from the smt solvers",
+                        default=False, action="store_true")
+    parser.add_argument("-p", "--preludes", default=[], nargs="+")
     args = parser.parse_args()
 
     for file in args.preludes:
         if not os.path.isfile(file):
             print(f"{file} does not exist")
             exit(1)
+
+    if not os.path.isfile(args.file):
+        print(f"{args.file} is not a valid file")
+        exit(1)
 
     if '--help' in sys.argv or '-h' in sys.argv or len(sys.argv) == 1:
         usage()
@@ -270,26 +283,22 @@ def main() -> None:
         debug()
         exit(0)
 
-    options: list[CmdlineOption] = []
-    function_names: list[str] = []
-    for arg in sys.argv[1:]:
-        if arg in (opt.value for opt in CmdlineOption):
-            options.append(CmdlineOption(arg))
-        elif arg.startswith('-'):
-            print(f'err: unknown option {arg}')
-            print()
-            usage()
-        else:
-            function_names.append(arg)
-
-    if len(function_names) == 0:
-        print("err: you need to specify at least the graphfile")
-        print()
-        usage()
-
-    filename = function_names[0]
-    function_names = function_names[1:]
-    run(filename, function_names, options, args)
+    options: set[CmdlineOption] = set([])
+    if args.show_graph:
+        options.add(CmdlineOption.SHOW_GRAPH)
+    if args.show_nip:
+        options.add(CmdlineOption.SHOW_NIP)
+    if args.show_ghost:
+        options.add(CmdlineOption.SHOW_GHOST)
+    if args.show_dsa:
+        options.add(CmdlineOption.SHOW_DSA)
+    if args.show_ap:
+        options.add(CmdlineOption.SHOW_AP)
+    if args.show_smt:
+        options.add(CmdlineOption.SHOW_SMT)
+    if args.show_sats:
+        options.add(CmdlineOption.SHOW_SATS)
+    run(args.file, args.fnames, options, args.preludes)
 
 
 if __name__ == "__main__":

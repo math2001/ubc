@@ -241,7 +241,8 @@ def emit_expr(expr: source.ExprT[assume_prove.VarName]) -> SMTLIB:
         if expr.operator is source.Operator.MEM_ACC:
             mem, symb_or_addr = expr.operands
             if not isinstance(symb_or_addr, source.ExprSymbol):
-                raise NotImplementedError("MemAcc for non symbols isn't supported yet")
+                raise NotImplementedError(
+                    "MemAcc for non symbols isn't supported yet")
             as_fn_call = emit_expr(symb_or_addr)
             return SMTLIB(f"({ops_to_smt[expr.operator]} {emit_expr(mem)} {as_fn_call})")
 
@@ -321,28 +322,22 @@ def emit_prelude() -> Sequence[Cmd]:
     htd = CmdDeclareSort(Identifier(str(HTD)), 0)
 
     mem_var = source.ExprVar(
-            typ=source.type_mem, name=assume_prove.VarName("mem"))
+        typ=source.type_mem, name=assume_prove.VarName("mem"))
     addr_var = source.ExprVar(typ=source.type_word61,
                               name=assume_prove.VarName("addr"))
     mem_acc = CmdDefineFun(Identifier(str("mem-acc")), [mem_var, addr_var], source.type_word64, source.ExprOp(
         typ=source.type_word64, operands=(mem_var, addr_var), operator=source.Operator.WORD_ARRAY_ACCESS))
-    prelude = [pms, htd, mem_acc]
+    prelude: Sequence[Cmd] = [pms, htd, mem_acc]
     return prelude
 
 
-def make_smtlib(p: assume_prove.AssumeProveProg, prelude_files:Sequence[str]=[]) -> SMTLIB:
+def make_smtlib(p: assume_prove.AssumeProveProg, prelude_files: Sequence[str] = []) -> SMTLIB:
     emited_identifiers: set[Identifier] = set()
     emited_variables: set[assume_prove.VarName] = set()
 
     # don't insert logic because hack below
     cmds: list[Cmd] = []
     cmds.extend(emit_prelude())
-
-    for file in prelude_files:
-        with open(file, "r") as f:
-            contents = f.read()
-            print(contents)
-        exit(1)
 
     # emit all auxilary variable declaration (declare-fun node_x_ok () Bool)
     for node_ok_name in p.nodes_script:
@@ -382,10 +377,16 @@ def make_smtlib(p: assume_prove.AssumeProveProg, prelude_files:Sequence[str]=[])
 
     cmds.append(CmdCheckSat())
 
-    # HACK: include sel4cp prelude
-    raw_prelude = SMTLIB('(set-logic QF_ABV)')
-    # with open('./sel4cp-prelude.smt2') as f:
-    #     raw_prelude = SMTLIB(f.read() + '\n\n')
+    raw_prelude = ""
+    # overwritten if file prelude exists
+    if len(prelude_files) == 0:
+        raw_prelude = SMTLIB('(set-logic QF_ABV)')
+
+    # NOTE: prelude order matters
+    for file in prelude_files:
+        with open(file) as f:
+            raw_prelude += SMTLIB(f"; prelude from {file}\n")
+            raw_prelude += SMTLIB(f.read() + "\n\n")
 
     clean_smt = merge_smtlib(emit_cmd(cmd) for cmd in cmds)
     return SMTLIB(raw_prelude + clean_smt)

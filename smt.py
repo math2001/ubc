@@ -211,6 +211,7 @@ def emit_bitvec_cast(target_typ: source.TypeBitVec, operator: Literal[source.Ope
 
 
 def emit_expr(expr: source.ExprT[assume_prove.VarName]) -> SMTLIB:
+    print(expr)
     if isinstance(expr, source.ExprNum):
         return emit_num_with_correct_type(expr)
     elif isinstance(expr, source.ExprOp):
@@ -249,9 +250,7 @@ def emit_expr(expr: source.ExprT[assume_prove.VarName]) -> SMTLIB:
         return SMTLIB(f'({ops_to_smt[expr.operator]} {" ".join(emit_expr(op) for op in expr.operands)})')
     elif isinstance(expr, source.ExprVar):
         return SMTLIB(f'{identifier(expr.name)}')
-    elif isinstance(expr, source.ExprSymbol):
-        return SMTLIB(expr.name)
-    elif isinstance(expr, source.ExprType):
+    elif isinstance(expr, source.ExprType | source.ExprSymbol):
         assert False, "what do i do with this?"
     elif isinstance(expr, source.ExprFunction):
         return SMTLIB(f'({expr.function_name} {" ".join(emit_expr(arg) for arg in expr.arguments)})')

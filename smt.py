@@ -45,8 +45,7 @@ ops_to_smt: Mapping[source.Operator, SMTLIB] = {
     source.Operator.MEM_ACC: SMTLIB("mem-acc")
 }
 
-# memsort for rv64 native
-MEM_SORT = SMTLIB('(Array (_ BitVec 61) (_ BitVec 64))')
+MEM_SORT = SMTLIB('(Array (_ BitVec 64) (_ BitVec 8))')
 
 BOOL = SMTLIB('Bool')
 
@@ -210,8 +209,11 @@ def emit_bitvec_cast(target_typ: source.TypeBitVec, operator: Literal[source.Ope
     assert_never(operator)
 
 
+def emit_expr_symbol(expr: source.ExprSymbol[Any]) -> SMTLIB: 
+    return SMTLIB(f"{expr.name}@global-symbol")
+
+
 def emit_expr(expr: source.ExprT[assume_prove.VarName]) -> SMTLIB:
-    print(expr)
     if isinstance(expr, source.ExprNum):
         return emit_num_with_correct_type(expr)
     elif isinstance(expr, source.ExprOp):
@@ -250,7 +252,9 @@ def emit_expr(expr: source.ExprT[assume_prove.VarName]) -> SMTLIB:
         return SMTLIB(f'({ops_to_smt[expr.operator]} {" ".join(emit_expr(op) for op in expr.operands)})')
     elif isinstance(expr, source.ExprVar):
         return SMTLIB(f'{identifier(expr.name)}')
-    elif isinstance(expr, source.ExprType | source.ExprSymbol):
+    elif isinstance(expr, source.ExprSymbol):
+        return emit_expr_symbol(expr)
+    elif isinstance(expr, source.ExprType):
         assert False, "what do i do with this?"
     elif isinstance(expr, source.ExprFunction):
         return SMTLIB(f'({expr.function_name} {" ".join(emit_expr(arg) for arg in expr.arguments)})')
@@ -322,7 +326,7 @@ def emit_prelude() -> Sequence[Cmd]:
 
     mem_var = source.ExprVar(
         typ=source.type_mem, name=assume_prove.VarName("mem"))
-    addr_var = source.ExprVar(typ=source.type_word61,
+    addr_var = source.ExprVar(typ=source.type_word64,
                               name=assume_prove.VarName("addr"))
     mem_acc = CmdDefineFun(Identifier(str("mem-acc")), [mem_var, addr_var], source.type_word64, source.ExprOp(
         typ=source.type_word64, operands=(mem_var, addr_var), operator=source.Operator.WORD_ARRAY_ACCESS))

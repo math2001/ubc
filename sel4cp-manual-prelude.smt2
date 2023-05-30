@@ -1,4 +1,4 @@
-(declare-fun badge () (_ BitVec 61))
+(declare-fun badge@global-symbol () (_ BitVec 64))
 (declare-fun handler_loop_pre_unhandled_reply () Maybe_MsgInfo)
 (declare-fun handler_loop_pre_receive_oracle () NextRecv)
 

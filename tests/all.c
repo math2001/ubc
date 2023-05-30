@@ -542,3 +542,13 @@ void concrete_ghost_interaction__fail(int n)
     }
     return;
 }
+
+char global; 
+
+void set_global(char x) {
+  global = x;
+}
+
+char get_global() {
+  return global;
+}

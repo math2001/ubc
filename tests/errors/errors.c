@@ -1,3 +1,4 @@
+
 int uninit() {
   int x;
   return x;
@@ -112,4 +113,20 @@ int times(int x,int y) {
 int combined_overflow_ops(int x, int y) {
   int r = x << 4;
   return r + y;
+}
+
+int two_errors(int x, int a) {
+  if(a) {
+    return x + 1;
+  }
+  return x + 2;
+}
+
+int one_unreachable(int x, int y) {
+  if(x ==0) {
+    if(x == 1) {
+      return y + 1;
+    }
+  }
+  return x + 2;
 }

@@ -7,6 +7,7 @@ let
     ps.typing-extensions
     ps.mypy
     ps.autopep8
+    ps.rich
   ]);
 in pkgs.mkShell {
   packages = [
@@ -14,6 +15,8 @@ in pkgs.mkShell {
     pkgs.pyright
     pkgs.graphviz
     pkgs.z3_4_11
+    pkgs.cvc5
     pkgs.time
+    pkgs.chromium
   ];
 }

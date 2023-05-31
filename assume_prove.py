@@ -13,10 +13,12 @@ APVar: TypeAlias = source.ExprVarT[VarName]
 
 class InstructionAssume(NamedTuple):
     expr: source.ExprT[VarName]
+    origin: source.NodeName  # where did this originate from?
 
 
 class InstructionProve(NamedTuple):
     expr: source.ExprT[VarName]
+    origin: source.NodeName
 
 
 Instruction = InstructionAssume | InstructionProve
@@ -78,13 +80,13 @@ def convert_expr_dsa_vars_to_ap(expr: source.ExprT[dsa.Incarnation[source.ProgVa
     assert_never(expr)
 
 
-def make_assume(var: dsa.Var[source.ProgVarName | nip.GuardVarName], expr: source.ExprT[dsa.Incarnation[source.ProgVarName | nip.GuardVarName]]) -> Instruction:
+def make_assume(var: dsa.Var[source.ProgVarName | nip.GuardVarName], expr: source.ExprT[dsa.Incarnation[source.ProgVarName | nip.GuardVarName]], origin: source.NodeName) -> Instruction:
     """ Helper function to make things as readable as possible, we really don't want to get this wrong
     """
     lhs = source.ExprVar(var.typ, convert_dsa_var_to_ap_var(var.name))
     rhs = convert_expr_dsa_vars_to_ap(expr)
     eq = source.ExprOp(source.type_bool, source.Operator.EQUALS, (lhs, rhs))
-    return InstructionAssume(eq)
+    return InstructionAssume(eq, origin)
 
 
 # TODO: rename to base var to ap var
@@ -148,21 +150,21 @@ def make_assume_prove_script_for_node(func: dsa.Function, n: source.NodeName) ->
 
         if (n, node.succ_then) not in func.cfg.back_edges:
             script.append(InstructionProve(source.expr_implies(
-                cond, node_ok_ap_var(node.succ_then))))
+                cond, node_ok_ap_var(node.succ_then)), n))
         if (n, node.succ_else) not in func.cfg.back_edges:
             script.append(InstructionProve(source.expr_implies(
-                source.expr_negate(cond), node_ok_ap_var(node.succ_else))))
+                source.expr_negate(cond), node_ok_ap_var(node.succ_else)), n))
 
     elif isinstance(node, source.NodeBasic):
         # BasicNode(upds, succ)
         #     assume upd[i].lhs = upd[i].rhs    forall i
         #     prove succ_ok
         for upd in node.upds:
-            script.append(make_assume(upd.var, upd.expr))
+            script.append(make_assume(upd.var, upd.expr, n))
 
         # proves successors are correct, ignoring back edges
         if (n, node.succ) not in func.cfg.back_edges:
-            script.append(InstructionProve(node_ok_ap_var(node.succ)))
+            script.append(InstructionProve(node_ok_ap_var(node.succ), n))
     elif isinstance(node, source.NodeCall):
         # CallNode(func, args, rets, succ):
         #     prove func.pre(args)
@@ -172,21 +174,22 @@ def make_assume_prove_script_for_node(func: dsa.Function, n: source.NodeName) ->
         # TODO: pre and post condition
         # proves successors are correct, ignoring back edges
         if (n, node.succ) not in func.cfg.back_edges:
-            script.append(InstructionProve(node_ok_ap_var(node.succ)))
+            script.append(InstructionProve(node_ok_ap_var(node.succ), n))
     elif isinstance(node, source.NodeEmpty):
         # proves successors are correct, ignoring back edges
         if (n, node.succ) not in func.cfg.back_edges:
-            script.append(InstructionProve(node_ok_ap_var(node.succ)))
+            script.append(InstructionProve(node_ok_ap_var(node.succ), n))
     elif isinstance(node, source.NodeAssume):
         script.append(InstructionAssume(
-            convert_expr_dsa_vars_to_ap(node.expr)))
+            convert_expr_dsa_vars_to_ap(node.expr), n))
         # proves successors are correct, ignoring back edges
         if (n, node.succ) not in func.cfg.back_edges:
-            script.append(InstructionProve(node_ok_ap_var(node.succ)))
+            script.append(InstructionProve(node_ok_ap_var(node.succ), n))
     elif isinstance(node, source.NodeAssert):
-        script.append(InstructionProve(convert_expr_dsa_vars_to_ap(node.expr)))
+        script.append(InstructionProve(
+            convert_expr_dsa_vars_to_ap(node.expr), n))
         if (n, node.succ) not in func.cfg.back_edges:
-            script.append(InstructionProve(node_ok_ap_var(node.succ)))
+            script.append(InstructionProve(node_ok_ap_var(node.succ), n))
     else:
         assert_never(node)
 
@@ -224,9 +227,9 @@ def make_prog(func: dsa.Function) -> AssumeProveProg:
     #       a lot of blocks are just 'prove succ'
 
     nodes_script: dict[NodeOkName, Script] = {
-        node_ok_name(source.NodeNameErr): [InstructionProve(source.ExprOp(source.type_bool, source.Operator.FALSE, ()))],
+        node_ok_name(source.NodeNameErr): [InstructionProve(source.ExprOp(source.type_bool, source.Operator.FALSE, ()), source.NodeNameRet)],
         # we don't have a post condition yet
-        node_ok_name(source.NodeNameRet): [InstructionProve(source.ExprOp(source.type_bool, source.Operator.TRUE, ()))],
+        node_ok_name(source.NodeNameRet): [InstructionProve(source.ExprOp(source.type_bool, source.Operator.TRUE, ()), source.NodeNameErr)],
     }
 
     # traverse topologically to make the pretty printer nicer to read

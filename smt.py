@@ -1,7 +1,9 @@
 from __future__ import annotations
 from enum import Enum
 import subprocess
-from typing import Any, Iterator, Literal, Mapping, Sequence, TypeAlias
+from sys import exc_info
+from types import NoneType
+from typing import Any, Collection, Iterator, Literal, Mapping, NoReturn, Optional, Sequence, TypeAlias
 from typing_extensions import NamedTuple, NewType, assert_never
 
 import textwrap
@@ -114,12 +116,26 @@ class CmdComment(NamedTuple):
     comment: str
 
 
+class CmdGetModel(NamedTuple):
+    pass
+
+
 EmptyLine = CmdComment('')
 
-Cmd = CmdDeclareFun | CmdDefineFun | CmdAssert | CmdCheckSat | CmdComment | CmdSetLogic | CmdDeclareSort
+Cmd = CmdDeclareFun | CmdDefineFun | CmdAssert | CmdCheckSat | CmdComment | CmdSetLogic | CmdDeclareSort | CmdGetModel
+
+# needed because we cannot parse Arrays.
+# This is fine because this parsing is only for error reporting
 
 
-ModelResponse: TypeAlias = CmdDefineFun
+class CmdPartialDefineFun(NamedTuple):
+    symbol: Identifier
+    args: Sequence[source.ExprVarT[assume_prove.VarName]]
+    ret_sort: source.Type
+    term: str
+
+
+ModelResponse = CmdDefineFun | CmdPartialDefineFun
 
 
 class CheckSatResponse(Enum):
@@ -332,6 +348,8 @@ def emit_cmd(cmd: Cmd) -> SMTLIB:
         return SMTLIB(f'(set-logic {cmd.logic.value})')
     elif isinstance(cmd, CmdDeclareSort):
         return SMTLIB(f"(declare-sort {cmd.symbol} {cmd.arity})")
+    elif isinstance(cmd, CmdGetModel):
+        return SMTLIB(f"(get-model)")
     assert_never(cmd)
 
 
@@ -426,9 +444,7 @@ def gen_mem_acc_prelude() -> SMTLIB:
     return SMTLIB('\n'.join(list(raw)))
 
 
-def make_smtlib(p: assume_prove.AssumeProveProg, prelude_files: Sequence[str] = []) -> SMTLIB:
-    mem_acc_prelude = gen_mem_acc_prelude()
-
+def make_smtlib(p: assume_prove.AssumeProveProg, prelude_files: Sequence[str] = [], assert_ok_nodes: Collection[source.NodeName] = [], with_model: bool = False) -> SMTLIB:
     emited_identifiers: set[Identifier] = set()
     emited_variables: set[assume_prove.VarName] = set()
 
@@ -468,9 +484,19 @@ def make_smtlib(p: assume_prove.AssumeProveProg, prelude_files: Sequence[str] = 
         cmds.append(cmd_assert_eq(node_ok_name, expr))
 
     cmds.append(CmdCheckSat())
+    if assert_ok_nodes is not None:
+        for ok_node in assert_ok_nodes:
+            # sanity check if this assert_additional_node actually exists
+            node_ok_name = assume_prove.node_ok_name(ok_node)
+            assert node_ok_name in p.nodes_script
+            cmds.append(CmdComment(
+                "WARNING: NOT A VALID PROOF RELATED SMT EXPORT This is used for error reporting only"))
+            cmds.append(CmdAssert(source.ExprVar(
+                source.type_bool, node_ok_name)))
+            cmds.append(CmdCheckSat())
+
     cmds.append(CmdAssert(source.expr_negate(
         source.ExprVar(source.type_bool, p.entry))))
-
     cmds.append(CmdCheckSat())
 
     raw_prelude = ""
@@ -483,9 +509,11 @@ def make_smtlib(p: assume_prove.AssumeProveProg, prelude_files: Sequence[str] = 
         with open(file) as f:
             raw_prelude += SMTLIB(f"; prelude from {file}\n")
             raw_prelude += SMTLIB(f.read() + "\n\n")
+    if with_model:
+        cmds.append(CmdGetModel())
 
     clean_smt = merge_smtlib(emit_cmd(cmd) for cmd in cmds)
-    return SMTLIB(raw_prelude + mem_acc_prelude + clean_smt)
+    return SMTLIB(raw_prelude + gen_mem_acc_prelude()  + clean_smt)
 
 
 class CheckSatResult(Enum):
@@ -494,34 +522,41 @@ class CheckSatResult(Enum):
     SAT = 'sat'
 
 
-def send_smtlib_to_z3(smtlib: SMTLIB) -> Iterator[CheckSatResult]:
-    """ Send command to an smt solver and returns a boolean per (check-sat)
+class SolverZ3(NamedTuple):
+    pass
+
+
+class SolverCVC5(NamedTuple):
+    pass
+
+
+SolverType = SolverZ3 | SolverCVC5
+
+
+def get_subprocess_file(solver_type: SolverType, filepath: str) -> Sequence[str]:
+    if isinstance(solver_type, SolverZ3):
+        return ["z3", "-file:"+filepath]
+    elif isinstance(solver_type, SolverCVC5):
+        return ["cvc5", "--incremental", "--produce-models", filepath]
+    else:
+        assert_never(solver_type)
+
+
+def send_smtlib(smtlib: SMTLIB, solver_type: SolverType) -> Iterator[CheckSatResult]:
+    """Send command to any smt solver and returns a boolean per (check-sat)
     """
-
-    # print("sending SMTLIB:")
-    # for i, line in enumerate(emit_cmd(cmd) for cmd in cmds):
-    #     print(f'{str(i+1).rjust(int(math.log10(len(cmds)) + 1))} | {line}')
-
-    # p = subprocess.Popen(["z3", "-version"])
-    # err = p.wait()
-    # if err:
-    #     raise ValueError("z3 not found")
 
     with open_temp_file(suffix='.smt2') as (f, fullpath):
         f.write(smtlib)
         f.close()
-
-        p = subprocess.Popen(["z3", "-file:" + fullpath],
-                             stderr=subprocess.PIPE, stdout=subprocess.PIPE)
+        p = subprocess.Popen(get_subprocess_file(
+            solver_type, fullpath), stderr=subprocess.PIPE, stdout=subprocess.PIPE)
         p.wait()
-
     assert p.stderr is not None
     assert p.stdout is not None
-
     if p.returncode != 0:
         print("stderr:")
         print(textwrap.indent(p.stdout.read().decode('utf-8'), '   '))
-        print("Return code:", p.returncode)
         return
 
     lines = p.stdout.read().splitlines()

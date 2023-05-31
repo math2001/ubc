@@ -34,7 +34,7 @@ def verify(filename: str, unsafe_func: syntax.Function, ctx: Dict[str, syntax.Fu
 
     prog = assume_prove.make_prog(dsa_func)
     smtlib = smt.make_smtlib(prog)
-    sats = tuple(smt.send_smtlib_to_z3(smtlib))
+    sats = tuple(smt.send_smtlib(smtlib, smt.SolverZ3()))
     return smt.parse_sats(sats)
 
 

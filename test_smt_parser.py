@@ -73,16 +73,16 @@ def get_bitvec_from_str(val: str, base: Literal[2, 16]) -> source.ExprT[ap.VarNa
     return source.ExprNum(typ=source.type_word32, num=intval)
 
 
-def get_model_response(name: str, ty: source.Type, e: source.ExprT[ap.VarName]) -> smt.ModelResponse:
-    return smt.ModelResponse(symbol=smt.Identifier(name), args=[], ret_sort=ty, term=e)
+def get_cmd_define_fun(name: str, ty: source.Type, e: source.ExprT[ap.VarName]) -> smt.CmdDefineFun:
+    return smt.CmdDefineFun(symbol=smt.Identifier(name), args=[], ret_sort=ty, term=e)
 
 
-def get_bool_fn(name: str, b: bool) -> smt.ModelResponse:
-    return get_model_response(name, source.type_bool, get_bool(b))
+def get_bool_fn(name: str, b: bool) -> smt.CmdDefineFun:
+    return get_cmd_define_fun(name, source.type_bool, get_bool(b))
 
 
-def get_bvec_fn(name: str, val: str, base: Literal[2, 16]) -> smt.ModelResponse:
-    return get_model_response(name, source.type_word32, get_bitvec_from_str(val, base))
+def get_bvec_fn(name: str, val: str, base: Literal[2, 16]) -> smt.CmdDefineFun:
+    return get_cmd_define_fun(name, source.type_word32, get_bitvec_from_str(val, base))
 
 
 def test_parse_model() -> None:
@@ -253,6 +253,116 @@ def test_parse_model() -> None:
 
     for out, expected in zip(responses[2], res):
         assert out == expected
+
+
+def test_complex() -> None:
+    fn = smt_parser.parse_responses()
+    with open("./tests/smt/pass/complex.smt", "r") as f:
+        data = f.read()
+        maybeModels = pc.parse(fn, data)
+        assert not isinstance(maybeModels, pc.ParseError)
+        # print(maybeModels)
+        _, s = maybeModels
+        assert s.strip() == ""
+
+
+def test_parse_parens_balance() -> None:
+    string = "(+ 3 4))"
+    fn = smt_parser.parse_balanced_parens()
+    maybeStr = fn(string)
+    assert not isinstance(maybeStr, pc.ParseError)
+    res_str, leftover = maybeStr
+    assert leftover == ")"
+    assert res_str == string[:-1]
+
+    string = "3)"
+    fn = smt_parser.parse_balanced_parens()
+    maybeStr = fn(string)
+    assert not isinstance(maybeStr, pc.ParseError)
+    res_str, leftover = maybeStr
+    assert leftover == ")"
+    assert res_str == string[:-1]
+
+    string = "(+ 3 (* 4 5)))"
+    fn = smt_parser.parse_balanced_parens()
+    maybeStr = fn(string)
+    assert not isinstance(maybeStr, pc.ParseError)
+    res_str, leftover = maybeStr
+    assert leftover == ")"
+    assert res_str == string[:-1]
+
+    string = "(_ bv0 64))"
+    fn = smt_parser.parse_balanced_parens()
+    maybeStr = fn(string)
+    assert not isinstance(maybeStr, pc.ParseError)
+    res_str, leftover = maybeStr
+    assert leftover == ")"
+    assert res_str == string[:-1]
+
+    string = "HTD!val!0)"
+    fn = smt_parser.parse_balanced_parens()
+    maybeStr = fn(string)
+    assert not isinstance(maybeStr, pc.ParseError)
+    res_str, leftover = maybeStr
+    assert leftover == ")"
+
+
+def test_parse_typed_arg() -> None:
+    string = "(abc (_ BitVec 64))"
+    maybeTypedArg = smt_parser.parse_sorted_var()(string)
+    assert not isinstance(maybeTypedArg, pc.ParseError)
+    typedArg, s = maybeTypedArg
+    assert typedArg.name == "abc"
+    assert typedArg.typ == source.type_word64
+    assert s == ""
+
+
+def test_parse_cmd_define_fun() -> None:
+    string = "(define-fun asd ((x (_ BitVec 64)) (y (Array (_ BitVec 64) (_ BitVec 64)))) (_ BitVec 64) (_ bv0 64))"
+    maybeDefineFun = smt_parser.parse_cmd_define_fun_partial()(string)
+    assert not isinstance(maybeDefineFun, pc.ParseError)
+    defineFun, s = maybeDefineFun
+    assert defineFun.symbol == "asd"
+    assert defineFun.term == "(_ bv0 64)"
+    assert s == ""
+
+    string = "(define-fun HTD~1 () HTD HTD!val!0)"
+    maybeDefineFun = smt_parser.parse_cmd_define_fun_partial()(string)
+    assert not isinstance(maybeDefineFun, pc.ParseError)
+    defineFun, s = maybeDefineFun
+    assert defineFun.symbol == "HTD~1"
+    assert len(defineFun.args) == 0
+    assert isinstance(defineFun.ret_sort, source.TypeBuiltin)
+    assert defineFun.ret_sort == source.TypeBuiltin(source.Builtin.HTD)
+    assert defineFun.term == "HTD!val!0"
+    assert s == ""
+
+    string = "(define-fun node_guard_n7_ok () Bool false)"
+    maybeDefineFun = smt_parser.parse_cmd_define_fun_partial()(string)
+    assert not isinstance(maybeDefineFun, pc.ParseError)
+    defineFun, s = maybeDefineFun
+    assert defineFun.symbol == "node_guard_n7_ok"
+
+
+def test_parse_type_word_array() -> None:
+    string = "(Array (_ BitVec 50) (_ BitVec 46))"
+    maybeWordArray = smt_parser.parse_type_word_array()(string)
+    assert not isinstance(maybeWordArray, pc.ParseError)
+    wordArray, s = maybeWordArray
+    assert s == ""
+    assert isinstance(wordArray, source.TypeWordArray)
+    assert wordArray.index_bits == 50
+    assert wordArray.value_bits == 46
+
+
+def test_parse_model_response() -> None:
+    string = "(define-fun asd ((x (_ BitVec 64)) (y (Array (_ BitVec 64) (_ BitVec 64)))) (_ BitVec 64) (_ bv0 64))"
+    maybeDefineFun = smt_parser.parse_model_response()(string)
+    assert not isinstance(maybeDefineFun, pc.ParseError)
+    defineFun, s = maybeDefineFun
+    assert defineFun.symbol == "asd"
+    assert defineFun.term == "(_ bv0 64)"
+    assert s == ""
 
 
 def test_should_parse_files() -> None:

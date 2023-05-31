@@ -18,6 +18,7 @@ from functools import reduce
 import abc_cfg
 from typing import Any, Callable, Iterator, Mapping, NewType, Sequence, Set, TypeAlias, overload
 from typing_extensions import assert_never
+from provenance import ProvenanceNipGuard, ProvenanceNipUpdate
 import source
 
 
@@ -250,6 +251,7 @@ def nip(func: source.Function) -> Function:
 
                 assert protection_name not in new_nodes, protection_name
                 new_nodes[protection_name] = NodeGuard(
+                    ProvenanceNipGuard(),
                     protections[succ], succ_then=succ, succ_else=source.NodeNameErr)
 
         # insert successors
@@ -262,6 +264,7 @@ def nip(func: source.Function) -> Function:
             assert len(jump_to) == 1
             update_name = source.NodeName(f'upd_n{n}')
             new_nodes[update_name] = NodeStateUpdate(
+                ProvenanceNipUpdate(),
                 state_updates[n], jump_to[0])
             jump_to[0] = update_name
 

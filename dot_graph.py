@@ -239,7 +239,6 @@ def viz_function(file: IOBase, fun: source.GenericFunction[Any, Any]) -> None:
             content = '&lt;empty&gt;'
         elif isinstance(node, source.NodeAssume):
             operands = list(source.expr_split_conjuncts(node.expr))
-
             content = '<b>assume</b>&nbsp;'
             content += pretty_safe_expr(operands[0])
             for operand in operands[1:]:

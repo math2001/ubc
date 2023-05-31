@@ -10,6 +10,7 @@ import source
 import nip
 import ghost_data
 import syntax
+from provenance import *
 
 
 @dataclass(frozen=True)
@@ -186,7 +187,7 @@ def sprinkle_subject_pre_and_post_conditions(func: nip.Function) -> Iterable[Ins
     yield Insertion(after=func.cfg.entry,
                     before=entry_node.succ,
                     node_name=source.NodeName('stash_initial_args'),
-                    mk_node=lambda succ: source.NodeBasic(stash_updates, succ))
+                    mk_node=lambda succ: source.NodeBasic(ProvenanceCallStashInitialArgs(), stash_updates, succ))
 
     def f(var: source.ExprVarT[source.ProgVarName | nip.GuardVarName]) -> source.ExprVarT[source.ProgVarName | nip.GuardVarName]:
         # this will change with the new way of writting specs
@@ -200,7 +201,7 @@ def sprinkle_subject_pre_and_post_conditions(func: nip.Function) -> Iterable[Ins
     yield Insertion(after=func.cfg.entry,
                     before=entry_node.succ,
                     node_name=source.NodeName('pre_condition'),
-                    mk_node=lambda succ: NodePreconditionAssumption(precondition, succ))
+                    mk_node=lambda succ: NodePreconditionAssumption(ProvenancePreCond(), precondition, succ))
 
     def g(var: source.ExprVarT[source.ProgVarName | nip.GuardVarName]) -> source.ExprVarT[source.ProgVarName | nip.GuardVarName]:
         # this will be cleaned up when we implement the new way of writting specs
@@ -222,7 +223,7 @@ def sprinkle_subject_pre_and_post_conditions(func: nip.Function) -> Iterable[Ins
     yield Insertion(after=pred,
                     before=source.NodeNameRet,
                     node_name=source.NodeName('post_condition'),
-                    mk_node=lambda succ: NodePostConditionProofObligation(converted_post_condition, succ, source.NodeNameErr))
+                    mk_node=lambda succ: NodePostConditionProofObligation(ProvenancePostCond(), converted_post_condition, succ, source.NodeNameErr))
 
 
 def sprinkle_loop_invariant(func: nip.Function, lh: source.LoopHeaderName) -> Iterable[Insertion]:
@@ -258,15 +259,20 @@ def sprinkle_loop_invariant(func: nip.Function, lh: source.LoopHeaderName) -> It
         yield Insertion(after=pred,
                         before=lh,
                         node_name=source.NodeName(f'loop_{lh}_latch_{i}'),
-                        mk_node=lambda succ: NodeLoopInvariantProofObligation(inv,
+                        mk_node=lambda succ: NodeLoopInvariantProofObligation(
+                                                                                ProvenanceLoopInvariantObligation(),
+                                                                                inv,
                                                                               succ,
-                                                                              source.NodeNameErr))
+                                                                              source.NodeNameErr
+                                                                              ))
 
     for i, nsucc in enumerate(func.cfg.all_succs[lh], start=1):
         yield Insertion(after=lh,
                         before=nsucc,
                         node_name=source.NodeName(f'loop_{lh}_inv_asm_{i}'),
-                        mk_node=lambda succ: NodeLoopInvariantAssumption(inv,
+                        mk_node=lambda succ: NodeLoopInvariantAssumption(
+                                                                        ProvenanceLoopInvariantAssume(),
+                                                                        inv,
                                                                          succ))
 
 
@@ -302,7 +308,7 @@ def sprinkle_function_call_pre_and_post_condition(func: nip.Function,
                         before=node_name,
                         node_name=source.NodeName(
                             f'call_stash_{node_name}_pred_{i}'),
-                        mk_node=lambda succ: source.NodeBasic(call_stash_updates, succ))
+                        mk_node=lambda succ: source.NodeBasic(ProvenanceCallStash(), call_stash_updates, succ))
 
         precond = source.convert_expr_vars(
             f, signatures[node.fname].precondition)
@@ -310,7 +316,7 @@ def sprinkle_function_call_pre_and_post_condition(func: nip.Function,
                         before=node_name,
                         node_name=source.NodeName(
                             f'call_pre_{node_name}_pred_{i}'),
-                        mk_node=lambda succ: NodePrecondObligationFnCall(precond, succ))
+                        mk_node=lambda succ: NodePrecondObligationFnCall(ProvenancePreCondFnObligation(), precond, succ))
 
     rets = node.rets  # pyright isn't smart enough
 
@@ -328,7 +334,9 @@ def sprinkle_function_call_pre_and_post_condition(func: nip.Function,
     yield Insertion(after=node_name,
                     before=node.succ,
                     node_name=source.NodeName(f'call_post_{node_name}'),
-                    mk_node=lambda succ: NodeAssumePostCondFnCall(postcond,
+                    mk_node=lambda succ: NodeAssumePostCondFnCall(
+                                                                ProvenancePostCondFnAssume(),
+                                                                postcond,
                                                                   succ))
 
 

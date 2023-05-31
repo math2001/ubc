@@ -15,6 +15,7 @@ sub = source.expr_sub
 slt = source.expr_slt
 sle = source.expr_sle
 eq = source.expr_eq
+neq = source.expr_neq
 neg = source.expr_negate
 
 T = source.expr_true
@@ -48,7 +49,7 @@ def i32v(name: str) -> source.ExprVarT[source.ProgVarName]:
 
 def i64v(name: str) -> source.ExprVarT[source.ProgVarName]:
     # return source.ExprVar(source.type_word64, source.HumanVarName(source.HumanVarNameSubject(name), use_guard=False, path=()))
-    return source.ExprVar(source.type_word32, source.ProgVarName(name + "___long#v"))
+    return source.ExprVar(source.type_word64, source.ProgVarName(name + "___long#v"))
 
 
 def i64(n: int) -> source.ExprNumT:
@@ -62,6 +63,11 @@ def g(var: source.ExprVarT[source.ProgVarName] | str) -> source.ExprVarT[nip.Gua
         return source.ExprVar(source.type_bool, nip.guard_name(source.ProgVarName(var)))
     return source.ExprVar(source.type_bool, nip.guard_name(source.ProgVarName(var.name)))
 
+def charv(n: str) -> source.ExprVarT[source.ProgVarName]:
+    return source.ExprVar(source.type_word8, source.ProgVarName(n)) 
+
+def char(n: int) -> source.ExprNumT:
+    return source.ExprNum(source.type_word8, n)
 
 # i32ret = source.ExprVar(source.type_word32, source.HumanVarName(
 #     source.HumanVarNameSpecial.RET, use_guard=False, path=()))
@@ -110,9 +116,25 @@ C_msg_info_valid = source.FunctionName('C_msg_info_valid')
 
 C_channel_valid = source.FunctionName('C_channel_valid')
 
+def htd_assigned() -> source.ExprVarT[nip.GuardVarName]:
+    return g(source.ExprVar(source.type_bool, source.ProgVarName('HTD')))
+
+
+def mem_assigned() -> source.ExprVarT[nip.GuardVarName]:
+    return g(source.ExprVar(source.type_bool, source.ProgVarName('MEM')))
+
+
+def pms_assigned() -> source.ExprVarT[nip.GuardVarName]:
+    return g(source.ExprVar(source.type_bool, source.ProgVarName('PMS')))
+
+
+def ghost_asserts_assigned() -> source.ExprVarT[nip.GuardVarName]:
+    return g(source.ExprVar(source.type_bool, source.ProgVarName('GhostAssertions')))
+
 
 def arg(v: source.ExprVarT[source.ProgVarName]) -> source.ExprVarT[source.ProgVarName]:
     return source.ExprVar(v.typ, source.ProgVarName(v.name + "/arg"))
+
 
 
 universe: Mapping[str, Mapping[str, source.Ghost[source.ProgVarName | nip.GuardVarName]]] = {
@@ -270,7 +292,37 @@ universe: Mapping[str, Mapping[str, source.Ghost[source.ProgVarName | nip.GuardV
             postcondition=eq(testghost, plus(arg(testghost), plus(arg(i32v('n')), i32(1)))))
         # the +1 breaks everything here
     },
-
+    "tests/libsel4cp_trunc.txt": {
+        "libsel4cp.handler_loop": source.Ghost(loop_invariants={
+                lh('3'): conjs(
+                    source.expr_implies(
+                        neq(charv('have_reply'), char(0)), 
+                        eq(g('reply_tag'), T), 
+                    ), 
+                    source.expr_implies(
+                        eq(g('is_endpoint'), T), 
+                        eq(
+                            neq(i64v('is_endpoint'), i64(0)), 
+                            neq(charv('have_reply'), char(0))
+                        )
+                    ), 
+                    eq(htd_assigned(), T), 
+                    eq(mem_assigned(), T), 
+                    eq(pms_assigned(), T), 
+                    eq(ghost_asserts_assigned(), T), 
+                    eq(g('have_reply'), T), 
+                ),
+                lh('10'): conjs(
+                    eq(i64v('is_endpoint'), i64(0)), 
+                    eq(g('badge'), T), 
+                    eq(g('idx'), T), 
+                    eq(htd_assigned(), T), 
+                    eq(mem_assigned(), T), 
+                    eq(pms_assigned(), T), 
+                    eq(ghost_asserts_assigned(), T)
+                )
+        }, precondition=T, postcondition=T)
+    }
     # "tests/libsel4cp_trunc.txt": {
     #     # protected_wp :: Ch -> MsgInfo -> WP MsgInfo
     #     # protected_wp ch mi prop lc = and

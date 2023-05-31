@@ -209,8 +209,23 @@ def emit_bitvec_cast(target_typ: source.TypeBitVec, operator: Literal[source.Ope
     assert_never(operator)
 
 
-def emit_expr_symbol(expr: source.ExprSymbol[Any]) -> SMTLIB: 
+def emit_expr_symbol(expr: source.ExprSymbol[Any]) -> SMTLIB:
     return SMTLIB(f"{expr.name}@global-symbol")
+
+
+load_word_map: Mapping[int, Identifier] = {
+    8: Identifier(str("load-word8")),
+    16: Identifier(str("load-word16")),
+    32: Identifier(str("load-word32")),
+    64: Identifier(str("load-word64"))
+}
+
+store_word_map: Mapping[int, Identifier] = {
+    8: Identifier(str("store-word8")),
+    16: Identifier(str("store-word16")),
+    32: Identifier(str("store-word32")),
+    64: Identifier(str("store-word64"))
+}
 
 
 def emit_expr(expr: source.ExprT[assume_prove.VarName]) -> SMTLIB:
@@ -246,8 +261,16 @@ def emit_expr(expr: source.ExprT[assume_prove.VarName]) -> SMTLIB:
             if not isinstance(symb_or_addr, source.ExprSymbol):
                 raise NotImplementedError(
                     "MemAcc for non symbols isn't supported yet")
+
+            if not isinstance(symb_or_addr.typ, source.TypeBitVec):
+                assert False, "Only TypBitVec is accepted"
+
             as_fn_call = emit_expr(symb_or_addr)
-            return SMTLIB(f"({ops_to_smt[expr.operator]} {emit_expr(mem)} {as_fn_call})")
+
+            if symb_or_addr.typ.size not in load_word_map.keys():
+                raise NotImplementedError(
+                    f"MemAcc for BitVec of size {symb_or_addr.typ.size} is not supported")
+            return SMTLIB(f"({load_word_map[symb_or_addr.typ.size]} {emit_expr(mem)} {as_fn_call})")
 
         return SMTLIB(f'({ops_to_smt[expr.operator]} {" ".join(emit_expr(op) for op in expr.operands)})')
     elif isinstance(expr, source.ExprVar):
@@ -320,25 +343,95 @@ def merge_smtlib(it: Iterator[SMTLIB]) -> SMTLIB:
     return SMTLIB('\n'.join(it))
 
 
+raw_mem_acc_prelude = ['''
+(define-fun load-word8 ((m {MemSort}) (p (_ BitVec 64)))
+	(_ BitVec 8)
+	(select m p)
+)
+''',
+                       '''
+(define-fun load-word16 ((m {MemSort}) (p (_ BitVec 64)))
+	(_ BitVec 16)
+	(concat (select m (bvadd p #x0000000000000001))
+		(select m p)
+	)
+)
+''',
+                       '''
+(define-fun load-word32 ((m {MemSort}) (p (_ BitVec 64)))
+	(_ BitVec 32)
+	(concat
+		(concat (select m (bvadd p #x0000000000000003))
+				(select m (bvadd p #x0000000000000002)))
+		(concat (select m (bvadd p #x0000000000000001))
+				(select m p))
+	)
+)
+''',
+                       '''
+(define-fun load-word64 ((m {MemSort}) (p (_ BitVec 64)))
+	(_ BitVec 64)
+	(concat (load-word32 m (bvadd p #x0000000000000004))
+			(load-word32 m p)
+	)
+)
+''',
+                       '''
+(define-fun store-word8 ((m {MemSort}) (p (_ BitVec 64)) (v (_ BitVec 8)))
+	{MemSort}
+	(store m p v)
+)
+''',
+                       '''
+(define-fun store-word16 ((m {MemSort}) (p (_ BitVec 64)) (v (_ BitVec 16)))
+	{MemSort}
+	(store-word8
+		(store-word8 m p ((_ extract 7 0) v))
+		(bvadd p #x0000000000000001)
+		((_ extract 15 8) v)
+	)
+)
+''',
+                       '''
+(define-fun store-word32 ((m {MemSort}) (p (_ BitVec 64)) (v (_ BitVec 32)))
+	{MemSort}
+	(store-word16
+		(store-word16 m p ((_ extract 15 0) v))
+		(bvadd p #x0000000000000002)
+		((_ extract 31 16) v)
+	)
+)
+''',
+                       '''
+(define-fun store-word64 ((m {MemSort}) (p (_ BitVec 64)) (v (_ BitVec 64)))
+	{MemSort}
+	(store-word32
+		(store-word32 m p ((_ extract 31 0) v))
+		(bvadd p #x0000000000000004)
+		((_ extract 63 32) v)
+	)
+)''']
+
+
 def emit_prelude() -> Sequence[Cmd]:
     pms = CmdDeclareSort(Identifier(str(PMS)), 0)
     htd = CmdDeclareSort(Identifier(str(HTD)), 0)
 
-    mem_var = source.ExprVar(
-        typ=source.type_mem, name=assume_prove.VarName("mem"))
-    addr_var = source.ExprVar(typ=source.type_word64,
-                              name=assume_prove.VarName("addr"))
-    mem_acc = CmdDefineFun(Identifier(str("mem-acc")), [mem_var, addr_var], source.type_word64, source.ExprOp(
-        typ=source.type_word64, operands=(mem_var, addr_var), operator=source.Operator.WORD_ARRAY_ACCESS))
-    prelude: Sequence[Cmd] = [pms, htd, mem_acc]
+    prelude: Sequence[Cmd] = [pms, htd]
     return prelude
 
 
+def gen_mem_acc_prelude() -> SMTLIB:
+    raw = map(lambda x: x.format(MemSort=MEM_SORT), raw_mem_acc_prelude)
+    return SMTLIB('\n'.join(list(raw)))
+
+
 def make_smtlib(p: assume_prove.AssumeProveProg, prelude_files: Sequence[str] = []) -> SMTLIB:
+    mem_acc_prelude = gen_mem_acc_prelude()
+
     emited_identifiers: set[Identifier] = set()
     emited_variables: set[assume_prove.VarName] = set()
 
-    # don't insert logic because hack below
     cmds: list[Cmd] = []
     cmds.extend(emit_prelude())
 
@@ -392,7 +485,7 @@ def make_smtlib(p: assume_prove.AssumeProveProg, prelude_files: Sequence[str] = 
             raw_prelude += SMTLIB(f.read() + "\n\n")
 
     clean_smt = merge_smtlib(emit_cmd(cmd) for cmd in cmds)
-    return SMTLIB(raw_prelude + clean_smt)
+    return SMTLIB(raw_prelude + mem_acc_prelude + clean_smt)
 
 
 class CheckSatResult(Enum):

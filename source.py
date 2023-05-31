@@ -178,6 +178,7 @@ def pretty_type_ascii(typ: Type) -> str:
 type_bool: Type = TypeBuiltin(Builtin.BOOL)
 type_mem: Type = TypeBuiltin(Builtin.MEM)
 type_word8 = TypeBitVec(8)
+type_word16 = TypeBitVec(16)
 type_word32 = TypeBitVec(32)
 type_word64 = TypeBitVec(64)
 
@@ -317,6 +318,8 @@ class Operator(Enum):
     MEM_DOM = 'MemDom'
     HTD_UPDATE = 'HTDUpdate'
     IF_THEN_ELSE = 'IfThenElse'
+
+    CONCAT = 'Concat'
 
     # COUNT_LEADING_ZEROES = 'CountLeadingZeros'
     # COUNT_TRAILING_ZEROES = 'CountTrailingZeroes'

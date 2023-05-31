@@ -108,19 +108,6 @@ Function tmp.less_than 6 n___int#v Word 32 m___int#v Word 32 Mem Mem HTD HTD PMS
 3 Basic 1 1 ret__int#v Word 32 Op IfThenElse Word 32 3 Op SignedLess Bool 2 Var n___int#v Word 32 Var m___int#v Word 32 Num 1 Word 32 Num 0 Word 32
 EntryPoint 3
 
-Function tmp.get_global 4 Mem Mem HTD HTD PMS PMS GhostAssertions WordArray 50 64 5 ret__char#v Word 8 Mem Mem HTD HTD PMS PMS GhostAssertions WordArray 50 64
-1 Basic Ret 0
-2 Cond 1 Err Op False Bool 0
-3 Basic 1 1 ret__char#v Word 8 Op MemAcc Word 8 2 Var Mem Mem Symbol global Word 64
-4 Cond 3 Err Op PGlobalValid Bool 3 Var HTD HTD Type Word 8 Symbol global Word 64
-EntryPoint 4
-
-Function tmp.set_global 5 x___char#v Word 8 Mem Mem HTD HTD PMS PMS GhostAssertions WordArray 50 64 4 Mem Mem HTD HTD PMS PMS GhostAssertions WordArray 50 64
-1 Basic Ret 0
-2 Basic 1 1 Mem Mem Op MemUpdate Mem 3 Var Mem Mem Symbol global Word 64 Var x___char#v Word 8
-3 Cond 2 Err Op PGlobalValid Bool 3 Var HTD HTD Type Word 8 Symbol global Word 64
-EntryPoint 3
-
 Function tmp.f_many_args 7 a___int#v Word 32 b___int#v Word 32 c___int#v Word 32 Mem Mem HTD HTD PMS PMS GhostAssertions WordArray 50 64 5 ret__int#v Word 32 Mem Mem HTD HTD PMS PMS GhostAssertions WordArray 50 64
 1 Basic Ret 0
 2 Cond 1 Err Op False Bool 0

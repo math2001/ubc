@@ -260,20 +260,20 @@ def sprinkle_loop_invariant(func: nip.Function, lh: source.LoopHeaderName) -> It
                         before=lh,
                         node_name=source.NodeName(f'loop_{lh}_latch_{i}'),
                         mk_node=lambda succ: NodeLoopInvariantProofObligation(
-                                                                                ProvenanceLoopInvariantObligation(),
-                                                                                inv,
-                                                                              succ,
-                                                                              source.NodeNameErr
-                                                                              ))
+                            ProvenanceLoopInvariantObligation(),
+                            inv,
+                            succ,
+                            source.NodeNameErr
+                        ))
 
     for i, nsucc in enumerate(func.cfg.all_succs[lh], start=1):
         yield Insertion(after=lh,
                         before=nsucc,
                         node_name=source.NodeName(f'loop_{lh}_inv_asm_{i}'),
                         mk_node=lambda succ: NodeLoopInvariantAssumption(
-                                                                        ProvenanceLoopInvariantAssume(),
-                                                                        inv,
-                                                                         succ))
+                            ProvenanceLoopInvariantAssume(),
+                            inv,
+                            succ))
 
 
 def sprinkle_loop_invariants(func: nip.Function) -> Iterable[Insertion]:
@@ -335,9 +335,9 @@ def sprinkle_function_call_pre_and_post_condition(func: nip.Function,
                     before=node.succ,
                     node_name=source.NodeName(f'call_post_{node_name}'),
                     mk_node=lambda succ: NodeAssumePostCondFnCall(
-                                                                ProvenancePostCondFnAssume(),
-                                                                postcond,
-                                                                  succ))
+                        ProvenancePostCondFnAssume(),
+                        postcond,
+                        succ))
 
 
 def sprinkle_function_call_pre_and_post_conditions(func: nip.Function,

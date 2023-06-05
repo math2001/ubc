@@ -254,7 +254,7 @@ def regex(regex: re.Pattern[str]) -> Parser[str]:
     return fn
 
 
-def array(start: Parser[T], p: Parser[V], end: Parser[K], sep: Parser[S]) -> Parser[list[V]]:
+def array(start: Parser[T], p: Parser[V], end: Parser[K], sep: Parser[S]) -> Parser[tp.Sequence[V]]:
     """a specialised parser for handling array like patterns for example [1,2,3,4] could be parsed by this parser. 
         A call to handle the previous case could look like: array(char('['), integer(), char(']'), char(','))
     """

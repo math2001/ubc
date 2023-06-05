@@ -169,7 +169,7 @@ def run(filename: str, function_names: Collection[str], options: Collection[Cmdl
         if CmdlineOption.SHOW_AP in options:
             assume_prove.pretty_print_prog(prog)
 
-        smtlib = smt.make_smtlib(prog, preludes)
+        smtlib = smt.make_smtlib(prog, prelude_files=preludes)
         if CmdlineOption.SHOW_SMT in options:
             if CmdlineOption.SHOW_LINE_NUMBERS in options:
                 lines = smtlib.splitlines()
@@ -192,7 +192,7 @@ def run(filename: str, function_names: Collection[str], options: Collection[Cmdl
             exit(2)
         elif result is smt.VerificationResult.FAIL:
             print("verification failed (good luck figuring out why)", file=sys.stderr)
-            er.debug_func_smt(dsa_func)
+            er.debug_func_smt(dsa_func, preludes)
             exit(1)
         else:
             assert_never(result)

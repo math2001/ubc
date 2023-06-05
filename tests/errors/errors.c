@@ -130,3 +130,12 @@ int one_unreachable(int x, int y) {
   }
   return x + 2;
 }
+
+int after_conds(int x, int y) {
+  if(y==3) {
+    y = 0;
+  }else {
+    y = 1;
+  }
+  return x + 1;
+}

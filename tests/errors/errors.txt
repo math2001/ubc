@@ -81,6 +81,16 @@ Function tmp.two_errors 6 x___int#v Word 32 a___int#v Word 32 Mem Mem HTD HTD PM
 7 Cond 6 4 Op Not Bool 1 Op Equals Bool 2 Var a___int#v Word 32 Num 0 Word 32
 EntryPoint 7
 
+Function tmp.after_conds 6 x___int#v Word 32 y___int#v Word 32 Mem Mem HTD HTD PMS PMS GhostAssertions WordArray 50 64 5 ret__int#v Word 32 Mem Mem HTD HTD PMS PMS GhostAssertions WordArray 50 64
+1 Basic Ret 0
+2 Cond 1 Err Op False Bool 0
+3 Basic 1 1 ret__int#v Word 32 Op Plus Word 32 2 Var x___int#v Word 32 Num 1 Word 32
+4 Cond 3 Err Op Equals Bool 2 Op SignedLessEquals Bool 2 Var x___int#v Word 32 Op Plus Word 32 2 Var x___int#v Word 32 Num 1 Word 32 Op SignedLessEquals Bool 2 Num 0 Word 32 Num 1 Word 32
+5 Basic 4 1 y___int#v Word 32 Num 0 Word 32
+6 Basic 4 1 y___int#v Word 32 Num 1 Word 32
+7 Cond 5 6 Op Equals Bool 2 Var y___int#v Word 32 Num 3 Word 32
+EntryPoint 7
+
 Function tmp.deep_failure 9 dfx___int#v Word 32 p1___char#v Word 8 p2___char#v Word 8 p3___char#v Word 8 p4___char#v Word 8 Mem Mem HTD HTD PMS PMS GhostAssertions WordArray 50 64 5 ret__int#v Word 32 Mem Mem HTD HTD PMS PMS GhostAssertions WordArray 50 64
 1 Basic Ret 0
 2 Cond 1 Err Op False Bool 0

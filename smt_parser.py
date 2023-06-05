@@ -220,6 +220,49 @@ def parse_balanced_parens() -> pc.Parser[str]:
     return fn
 
 
+def parse_forall() -> pc.Parser[smt.CmdForall]:
+    def fn(s: str) -> pc.ParseResult[smt.CmdForall]:
+        maybeStart = pc.compose(
+            ws(pc.char('(')), ws(pc.string("forall")))(s)
+
+        if isinstance(maybeStart, pc.ParseError):
+            return maybeStart
+
+        _, s = maybeStart
+
+        maybeArgs = pc.array(
+            ws(pc.char('(')),
+            parse_sorted_var(),
+            ws(pc.char(')')),
+            pc.many1(pc.choice([
+                pc.space(),
+                pc.tab(),
+                pc.carriage_return(),
+                pc.newline()
+            ]))
+        )(s)
+
+        if isinstance(maybeArgs, pc.ParseError):
+            return maybeArgs
+        args, s = maybeArgs
+
+        maybeTerm = ws(parse_balanced_parens())(s)
+        if isinstance(maybeTerm, pc.ParseError):
+            return maybeTerm
+
+        term, s = maybeTerm
+
+        maybeEndParen = ws(pc.char(')'))(s)
+
+        if isinstance(maybeEndParen, pc.ParseError):
+            return maybeEndParen
+
+        (_, s) = maybeEndParen
+
+        return (smt.CmdForall(args, term), s)
+    return fn
+
+
 # Is there a better way to do this?
 
 
@@ -393,7 +436,10 @@ def parse_cmd_define_fun() -> pc.Parser[smt.CmdDefineFun]:
 
 
 def parse_model_response() -> pc.Parser[smt.ModelResponse]:
-    return pc.choice([parse_cmd_define_fun(), parse_cmd_define_fun_partial()])
+    # Coz apparently specifications are just based on vibes
+    # you don't need to adhere to them apparently.
+    # Fuck this
+    return pc.choice([parse_cmd_define_fun(), parse_cmd_define_fun_partial(), parse_cmd_declare_fun(), parse_forall()])
 
 
 def parse_get_model_response() -> pc.Parser[smt.GetModelResponse]:

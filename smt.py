@@ -124,9 +124,17 @@ EmptyLine = CmdComment('')
 
 Cmd = CmdDeclareFun | CmdDefineFun | CmdAssert | CmdCheckSat | CmdComment | CmdSetLogic | CmdDeclareSort | CmdGetModel
 
+# This isn't SMTLIB specified but
+# Z3/CVC5 generates these in model_response's anyway :(
+
+
+class CmdForall(NamedTuple):
+    args: Sequence[source.ExprVarT[assume_prove.VarName]]
+    term: str
+
+
 # needed because we cannot parse Arrays.
 # This is fine because this parsing is only for error reporting
-
 
 class CmdPartialDefineFun(NamedTuple):
     symbol: Identifier
@@ -135,7 +143,7 @@ class CmdPartialDefineFun(NamedTuple):
     term: str
 
 
-ModelResponse = CmdDefineFun | CmdPartialDefineFun
+ModelResponse = CmdDefineFun | CmdPartialDefineFun | CmdDeclareFun | CmdForall
 
 
 class CheckSatResponse(Enum):
@@ -444,7 +452,7 @@ def gen_mem_acc_prelude() -> SMTLIB:
     return SMTLIB('\n'.join(list(raw)))
 
 
-def make_smtlib(p: assume_prove.AssumeProveProg, prelude_files: Sequence[str] = [], assert_ok_nodes: Collection[source.NodeName] = [], with_model: bool = False) -> SMTLIB:
+def make_smtlib(p: assume_prove.AssumeProveProg, prelude_files: Sequence[str] = (), assert_ok_nodes: Collection[source.NodeName] = (), with_model: bool = False) -> SMTLIB:
     emited_identifiers: set[Identifier] = set()
     emited_variables: set[assume_prove.VarName] = set()
 
@@ -513,7 +521,7 @@ def make_smtlib(p: assume_prove.AssumeProveProg, prelude_files: Sequence[str] = 
         cmds.append(CmdGetModel())
 
     clean_smt = merge_smtlib(emit_cmd(cmd) for cmd in cmds)
-    return SMTLIB(raw_prelude + gen_mem_acc_prelude()  + clean_smt)
+    return SMTLIB(raw_prelude + gen_mem_acc_prelude() + clean_smt)
 
 
 class CheckSatResult(Enum):

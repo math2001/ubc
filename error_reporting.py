@@ -1,7 +1,7 @@
 import sys
 import dsa
 import assume_prove as ap
-from typing import Callable, NamedTuple, Optional, Set, Tuple
+from typing import Callable, NamedTuple, Optional, Set, Tuple, Sequence
 from typing_extensions import assert_never
 import source
 import smt
@@ -164,6 +164,10 @@ def determine_reason(node: DSANode) -> FailureReason:
         assert False, "didn't expect to see a loop invariant assumption as being the failure reason"
     elif isinstance(node.origin, ProvenancePostCond):
         return FnPostCondFailure()
+    elif isinstance(node.origin, ProvenanceCallStash):
+        assert False, "didn't expect to see call stashing as being the failure reason"
+    elif isinstance(node.origin, ProvenanceCallStashInitialArgs):
+        assert False, "didn't expect to see initial call stashing as being the failure reason"
     else:
         assert_never(node.origin)
 
@@ -293,7 +297,7 @@ def extract_and_print_why(func: dsa.Function, reason: FailureReason, node: DSANo
 
 
 def get_sat(smtlib: smt.SMTLIB) -> Tuple[bool, smt.CheckSatResult]:
-    results = tuple(smt.send_smtlib(smtlib, smt.SolverCVC5()))
+    results = tuple(smt.send_smtlib(smtlib, smt.SolverZ3()))
     sz = len(results)
     assert sz >= 2
     for i in range(0, sz-1):
@@ -343,7 +347,8 @@ def send_smtlib_model(smtlib: smt.SMTLIB, solver_type: smt.SolverType) -> smt.Re
     res = fn(lines)
     assert not isinstance(
         res, pc.ParseError), "The smt parser doesn't handle the output here, only a small subset of SMT is parsed at the moment"
-    responses, _ = res
+    responses, leftover = res
+    print(leftover.strip())
     return responses
 
 
@@ -359,9 +364,12 @@ def get_relevant_responses(node_vars: Set[source.ExprVarT[ap.VarName]], response
         if isinstance(res, smt.CheckSatResponse):
             continue
 
-        for defFun in res:
-            if defFun.symbol in rel_vars:
-                eprint(defFun)
+        for r in res:
+            if isinstance(r, smt.CmdForall):
+                continue
+            fun = r
+            if fun.symbol in rel_vars:
+                eprint(fun)
 
 
 def node_dsa_to_node_ap(node: DSANode) -> source.Node[ap.VarName]:
@@ -392,7 +400,7 @@ def node_dsa_to_node_ap(node: DSANode) -> source.Node[ap.VarName]:
         assert_never(node)
 
 
-def debug_func_smt(func: dsa.Function) -> Tuple[FailureReason, source.NodeName, Optional[source.NodeName]]:
+def debug_func_smt(func: dsa.Function, prelude_files: Sequence[str]) -> Tuple[FailureReason, source.NodeName, Optional[source.NodeName]]:
     prog = ap.make_prog(func)
     q: set[source.NodeName] = set([func.cfg.entry])
     not_taken_path: set[source.NodeName] = set([])
@@ -402,14 +410,15 @@ def debug_func_smt(func: dsa.Function) -> Tuple[FailureReason, source.NodeName, 
         visited = visited.union(set([node_name]))
         node = func.nodes[node_name]
         not_taken_path_and_node = not_taken_path.union(set([node_name]))
-        node_smtlib = smt.make_smtlib(prog, not_taken_path_and_node)
+        node_smtlib = smt.make_smtlib(
+            prog, prelude_files=prelude_files, assert_ok_nodes=not_taken_path_and_node)
         consistent, node_sat = get_sat(node_smtlib)
         assert consistent
         # we do not care about the Err and Ret node
         successors = list(
             filter(lambda x: x != source.NodeNameErr and x != source.NodeNameRet and ((node_name, x) not in func.cfg.back_edges), func.cfg.all_succs[node_name]))
         successors_smtlib = smt.make_smtlib(
-            prog, not_taken_path.union(set(successors)))
+            prog, prelude_files=prelude_files, assert_ok_nodes=not_taken_path.union(set(successors)))
         _, successors_sat = get_sat(successors_smtlib)
         if successors_sat == smt.CheckSatResult.SAT and node_sat == smt.CheckSatResult.UNSAT:
             eprint("ERROR REPORTING", style="red on white", justify="center")
@@ -432,7 +441,7 @@ def debug_func_smt(func: dsa.Function) -> Tuple[FailureReason, source.NodeName, 
                 eprint(pretty_node(used_node_as_ap), style="magenta bold")
 
             succ_smtlib_with_model = smt.make_smtlib(
-                prog, not_taken_path.union(set(successors)), with_model=True)
+                prog, prelude_files=prelude_files, assert_ok_nodes=not_taken_path.union(set(successors)), with_model=True)
             succ_model = send_smtlib_model(
                 succ_smtlib_with_model, smt.SolverZ3())
 
@@ -453,18 +462,21 @@ def debug_func_smt(func: dsa.Function) -> Tuple[FailureReason, source.NodeName, 
             node2 = successors[1]
             not_taken_path_and_succ1 = not_taken_path.union(set([node1]))
             not_taken_path_and_succ2 = not_taken_path.union(set([node2]))
-            succ_node1_smtlib = smt.make_smtlib(prog, not_taken_path_and_succ1)
-            succ_node2_smtlib = smt.make_smtlib(prog, not_taken_path_and_succ2)
+            succ_node1_smtlib = smt.make_smtlib(
+                prog, prelude_files=prelude_files, assert_ok_nodes=not_taken_path_and_succ1)
+            succ_node2_smtlib = smt.make_smtlib(
+                prog, prelude_files=prelude_files, assert_ok_nodes=not_taken_path_and_succ2)
             succ_node1_consistent, succ_node1_sat = get_sat(succ_node1_smtlib)
             succ_node2_consistent, succ_node2_sat = get_sat(succ_node2_smtlib)
             if succ_node1_sat == smt.CheckSatResult.UNSAT and succ_node2_sat == smt.CheckSatResult.UNSAT:
                 if succ_node1_consistent:
                     q = q.union(set([node1]))
+                    not_taken_path.add(node2)
                 elif succ_node2_consistent:
                     q = q.union(set([node2]))
+                    not_taken_path.add(node1)
                 else:
                     assert False, "one path has to be consistent"
-                # EDGE case take any path but do not add to not_taken_path
                 q = q.union(set([node1]))
             elif succ_node1_sat == smt.CheckSatResult.UNSAT and succ_node2_sat == smt.CheckSatResult.SAT:
                 q.add(node1)
@@ -473,7 +485,9 @@ def debug_func_smt(func: dsa.Function) -> Tuple[FailureReason, source.NodeName, 
                 q.add(node2)
                 not_taken_path.add(node1)
             else:
-                assert False, "When checking for result of conditional both paths returned SAT, this is not expected"
+                # EDGE case take any path but do not add to not_taken_path
+                q = q.union(set([node1]))
+                
         else:
             q = q.union(set(successors))
     assert False, "This was reached because we failed to diagnose an error - either this function succeeds or some edge case is missing for error handling"

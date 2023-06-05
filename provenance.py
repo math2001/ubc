@@ -40,11 +40,13 @@ class ProvenanceLoopInvariantAssume(NamedTuple):
 class ProvenanceLoopInvariantObligation(NamedTuple):
     pass
 
+
 class ProvenanceCallStashInitialArgs(NamedTuple):
     pass
+
 
 class ProvenanceCallStash(NamedTuple):
     pass
 
 
-Provenance = ProvenanceGraphLang | ProvenanceNipGuard | ProvenanceNipUpdate | ProvenanceDSAJoiner | ProvenancePreCond | ProvenancePreCondFnObligation | ProvenancePostCondFnAssume | ProvenanceLoopInvariantAssume | ProvenanceLoopInvariantObligation | ProvenancePostCond | ProvenanceCallStashInitialArgs | ProvenanceCallStash  
+Provenance = ProvenanceGraphLang | ProvenanceNipGuard | ProvenanceNipUpdate | ProvenanceDSAJoiner | ProvenancePreCond | ProvenancePreCondFnObligation | ProvenancePostCondFnAssume | ProvenanceLoopInvariantAssume | ProvenanceLoopInvariantObligation | ProvenancePostCond | ProvenanceCallStashInitialArgs | ProvenanceCallStash

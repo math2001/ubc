@@ -29,6 +29,13 @@ def test_parse_cmd_declare_fun() -> None:
     assert declFun == declFunExpected
     assert s == ''
 
+    string = "(declare-fun PMS!val!1 () PMS)"
+    maybeDeclFun = pc.parse(f, string)
+    assert not isinstance(maybeDeclFun, pc.ParseError)
+
+    _, s = maybeDeclFun
+    assert s.strip() == ''
+
 
 def test_parse_op() -> None:
     f = smt_parser.parse_op()
@@ -360,6 +367,7 @@ def test_parse_model_response() -> None:
     maybeDefineFun = smt_parser.parse_model_response()(string)
     assert not isinstance(maybeDefineFun, pc.ParseError)
     defineFun, s = maybeDefineFun
+    assert isinstance(defineFun, smt.CmdPartialDefineFun)
     assert defineFun.symbol == "asd"
     assert defineFun.term == "(_ bv0 64)"
     assert s == ""
@@ -372,3 +380,40 @@ def test_should_parse_files() -> None:
             data = f.read()
             maybeModels = pc.parse(fn, data)
             assert not isinstance(maybeModels, pc.ParseError)
+            _, s = maybeModels
+            assert s.strip() == ""
+
+
+def test_should_parse_libsel4cp_model() -> None:
+    fn = smt_parser.parse_responses()
+    with open("./tests/smt/pass/libsel4cp.smt", "r") as f:
+        s = f.read()
+        maybeModels = pc.parse(fn, s)
+        assert not isinstance(maybeModels, pc.ParseError)
+        _, s = maybeModels
+        print(s.strip())
+        assert s.strip() == ""
+
+
+def test_parse_forall() -> None:
+    fn = smt_parser.parse_forall()
+    string = """
+    (forall ((x PMS)) 
+        (or (= x PMS!val!1) 
+            (= x PMS!val!2) 
+            (= x PMS!val!0) 
+            (= x PMS!val!3) 
+            (= x PMS!val!4)))"""
+    maybeForall = fn(string)
+    assert not isinstance(maybeForall, pc.ParseError)
+    _, s = maybeForall
+    assert s.strip() == ""
+
+    string = """
+    (forall ((x HTD)) 
+        (or (x = HTD!val!0) (= x HTD!val!2) (= x HTD!val!3) (= x HTD!val!1)))
+    """
+    maybeForall = fn(string)
+    assert not isinstance(maybeForall, pc.ParseError)
+    _, s = maybeForall
+    assert s.strip() == ""

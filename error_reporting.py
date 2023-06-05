@@ -492,7 +492,7 @@ def debug_func_smt(func: dsa.Function, prelude_files: Sequence[str]) -> Tuple[Fa
             else:
                 # EDGE case take any path but do not add to not_taken_path
                 q = q.union(set([node1]))
-                
+
         else:
             q = q.union(set(successors))
     assert False, "This was reached because we failed to diagnose an error - either this function succeeds or some edge case is missing for error handling"

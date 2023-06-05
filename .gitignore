@@ -4,3 +4,4 @@ demo/*.zip
 a.out
 .hypothesis
 .ccls-cache
+.direnv

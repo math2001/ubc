@@ -434,12 +434,39 @@ def parse_cmd_define_fun() -> pc.Parser[smt.CmdDefineFun]:
         return (smt.CmdDefineFun(symbol=ident, args=args, ret_sort=ret_sort, term=expr), s)
     return fn
 
+def parse_cmd_comment() -> pc.Parser[smt.CmdComment]:
+    def fn(s: str) -> pc.ParseResult[smt.CmdComment]:
+        startStr = ";;"
+        maybeStart = ws(pc.string(startStr))(s)
+        if isinstance(maybeStart, pc.ParseError):
+            return maybeStart
+        
+        _, s = maybeStart
+
+        comment_idx: tp.Optional[int] = None
+        for i in range(0, len(s)):
+            if s[i] == '\n':
+                comment_idx = i 
+                break
+
+        
+        # no new line case -> entire string 
+        # must be a comment
+        if comment_idx == None: 
+            comment_idx = len(s)
+
+        comment = s[:comment_idx]
+        rest = s[comment_idx:]
+
+        return (smt.CmdComment(comment), rest)
+    return fn
+
 
 def parse_model_response() -> pc.Parser[smt.ModelResponse]:
     # Coz apparently specifications are just based on vibes
     # you don't need to adhere to them apparently.
     # Fuck this
-    return pc.choice([parse_cmd_define_fun(), parse_cmd_define_fun_partial(), parse_cmd_declare_fun(), parse_forall()])
+    return pc.choice([parse_cmd_define_fun(), parse_cmd_define_fun_partial(), parse_cmd_declare_fun(), parse_forall(), parse_cmd_comment()])
 
 
 def parse_get_model_response() -> pc.Parser[smt.GetModelResponse]:

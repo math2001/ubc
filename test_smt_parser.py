@@ -417,3 +417,32 @@ def test_parse_forall() -> None:
     assert not isinstance(maybeForall, pc.ParseError)
     _, s = maybeForall
     assert s.strip() == ""
+
+def test_parse_cmd_comment() -> None:
+    fn = smt_parser.parse_cmd_comment()
+    string = ";; Hello World, this is a comment"
+    
+    maybeComment = fn(string)
+    assert not isinstance(maybeComment, pc.ParseError)
+
+    comment, s = maybeComment 
+    assert comment.comment == string[2:]
+    assert s == ""
+
+    string = ";;" 
+    maybeComment = fn(string)
+    assert not isinstance(maybeComment, pc.ParseError)
+
+    comment, s = maybeComment 
+    assert comment.comment == string[2:]
+    assert s == ""
+
+    string = ";; nice \n\n bye" 
+    print("string[8] =", ord(string[8]))
+    maybeComment = fn(string)
+    assert not isinstance(maybeComment, pc.ParseError)
+
+    comment, s = maybeComment 
+    assert comment.comment == " nice "
+    assert s == "\n\n bye"
+

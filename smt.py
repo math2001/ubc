@@ -1,9 +1,7 @@
 from __future__ import annotations
 from enum import Enum
 import subprocess
-from sys import exc_info
-from types import NoneType
-from typing import Any, Collection, Iterator, Literal, Mapping, NoReturn, Optional, Sequence, TypeAlias
+from typing import Any, Collection, Iterator, Literal, Mapping, Sequence
 from typing_extensions import NamedTuple, NewType, assert_never
 
 import textwrap
@@ -143,7 +141,7 @@ class CmdPartialDefineFun(NamedTuple):
     term: str
 
 
-ModelResponse = CmdDefineFun | CmdPartialDefineFun | CmdDeclareFun | CmdForall
+ModelResponse = CmdDefineFun | CmdPartialDefineFun | CmdDeclareFun | CmdForall | CmdComment
 
 
 class CheckSatResponse(Enum):

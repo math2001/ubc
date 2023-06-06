@@ -60,8 +60,6 @@ pretty_opers = {
     "Equals": "=",
     "SignedLess": "&lt;<sub>s</sub>",
     "SignedLessEquals": "≤<sub>s</sub>",
-    "Or": "or",
-    "And": "and",
 }
 
 known_typ_change = set(

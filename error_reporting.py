@@ -307,7 +307,6 @@ def get_sat(smtlib: smt.SMTLIB) -> Tuple[bool, smt.CheckSatResult]:
 
 
 def pretty_node(node: source.Node[source.VarNameKind]) -> str:
-    """ This isn't great in a way, it doesn't print the proper graphlang name it uses the dot format for dsa names"""
     if isinstance(node, source.NodeBasic):
         return "\n".join(pretty_safe_update(u) for u in node.upds)
     elif isinstance(node, source.NodeCond):
@@ -324,6 +323,8 @@ def pretty_node(node: source.Node[source.VarNameKind]) -> str:
         assert False, "We should never see a NodeEmpty being the reason a SAT was returned"
     else:
         assert_never(node)
+
+
 
 
 def send_smtlib_model(smtlib: smt.SMTLIB, solver_type: smt.SolverType) -> smt.Responses:
@@ -348,7 +349,7 @@ def send_smtlib_model(smtlib: smt.SMTLIB, solver_type: smt.SolverType) -> smt.Re
     assert not isinstance(
         res, pc.ParseError), "The smt parser doesn't handle the output here, only a small subset of SMT is parsed at the moment"
     responses, leftover = res
-    print(leftover.strip())
+    assert leftover.strip() == ""
     return responses
 
 
@@ -365,7 +366,7 @@ def get_relevant_responses(node_vars: Set[source.ExprVarT[ap.VarName]], response
             continue
 
         for r in res:
-            if isinstance(r, smt.CmdForall):
+            if isinstance(r, smt.CmdForall | smt.CmdComment):
                 continue
             fun = r
             if fun.symbol in rel_vars:
@@ -432,6 +433,9 @@ def debug_func_smt(func: dsa.Function, prelude_files: Sequence[str]) -> Tuple[Fa
             eprint("FAILING ASSERTION", style="red on white", justify="center")
             node_as_ap = node_dsa_to_node_ap(node)
             eprint("ASSERT", pretty_node(node_as_ap))
+            expr = ap.apply_weakest_precondition(prog.nodes_script[ap.node_ok_name(node_name)])
+            eprint("FAILING ASSERT SMT", style="red on white", justify="center")
+            eprint(smt.emit_cmd(smt.CmdAssert(expr)))
             if used_node_name is not None:
                 used_node = func.nodes[used_node_name]
                 used_node_as_ap = node_dsa_to_node_ap(used_node)
@@ -439,9 +443,10 @@ def debug_func_smt(func: dsa.Function, prelude_files: Sequence[str]) -> Tuple[Fa
                 eprint("HINT: SUSPECTED STATEMENT",
                        justify="center", style="red on white")
                 eprint(pretty_node(used_node_as_ap), style="magenta bold")
-
+            
             succ_smtlib_with_model = smt.make_smtlib(
                 prog, prelude_files=prelude_files, assert_ok_nodes=not_taken_path.union(set(successors)), with_model=True)
+
             succ_model = send_smtlib_model(
                 succ_smtlib_with_model, smt.SolverZ3())
 

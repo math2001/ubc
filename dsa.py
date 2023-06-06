@@ -453,6 +453,8 @@ def dsa(func: ghost_code.Function) -> Function:
 
     assert loops.keys() == func.loops.keys()
 
+    print(s.incarnations)
+
     return Function(
         cfg=cfg,
         signature=source.FunctionSignature(

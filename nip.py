@@ -16,7 +16,7 @@ from dataclasses import dataclass
 import dataclasses
 from functools import reduce
 import abc_cfg
-from typing import Any, Callable, Iterator, Mapping, NewType, Sequence, Set, TypeAlias, overload
+from typing import Any, Callable, Iterator, Mapping, NewType, Sequence, Set, TypeAlias, overload, Tuple
 from typing_extensions import assert_never
 from provenance import ProvenanceNipGuard, ProvenanceNipUpdate
 import source
@@ -87,9 +87,16 @@ def make_state_update_for_node(node: source.Node[source.ProgVarName]) -> Iterato
         assert_never(node)
 
 
-def make_protection_for_node(node: source.Node[source.ProgVarName]) -> source.ExprT[GuardVarName]:
+def make_protection_for_node(node: source.Node[source.ProgVarName]) -> Tuple[Set[source.ExprVarT[GuardVarName]],source.ExprT[GuardVarName]]:
+    variables: Set[source.ExprVarT[GuardVarName]] = set([])
+
+    guards: Tuple[source.ExprT[GuardVarName]] = tuple(guard_var (v) for v in source.used_variables_in_node(node) if not source.is_loop_counter_name(v.name))
+    variables = set(guards)
+    
+    return variables, source.ExprOp(source.type_bool, source.Operator.AND, guards)
     # for now, we ignore short circuiting
-    return reduce(source.expr_and, (guard_var(v) for v in source.used_variables_in_node(node) if not source.is_loop_counter_name(v.name)), source.expr_true)
+    # return (variables, reduce(source.expr_and, guards, source.expr_true))
+    # return (variables, reduce(source.expr_and, (guard_var(v) for v in source.used_variables_in_node(node) if not source.is_loop_counter_name(v.name)), source.expr_true))
 
 
 def make_initial_state(func: source.Function) -> Iterator[source.Update[GuardVarName]]:
@@ -193,12 +200,13 @@ def nip(func: source.Function) -> Function:
                         tuple[source.Update[GuardVarName], ...]] = {}
 
     state_updates[func.cfg.entry] = tuple(make_initial_state(func))
-
+    all_guard_vars: Set[source.ExprVarT[GuardVarName]] = set([])
     for n in func.traverse_topologically(skip_err_and_ret=True):
         node = func.nodes[n]
         if isinstance(node, source.NodeBasic | source.NodeCall | source.NodeCond):
             assert n not in protections
-            p = make_protection_for_node(node)
+            guard_vars, p = make_protection_for_node(node)
+            all_guard_vars = all_guard_vars | guard_vars
             if p != source.expr_true:
                 protections[n] = p
         elif isinstance(node, source.NodeAssume | source.NodeAssert):
@@ -274,11 +282,13 @@ def nip(func: source.Function) -> Function:
     cfg = abc_cfg.compute_cfg_from_all_succs(all_succs, func.cfg.entry)
     loops = abc_cfg.compute_loops(
         new_nodes, cfg)
+    
+    print(set(loops.keys()) - set(func.loops.keys()))
 
     assert loops.keys() == func.loops.keys(
     ), "more work required: loop headers changed during conversion, need to keep ghost's loop invariant in sync"
 
     # return Function(cfg=cfg, nodes=new_nodes, loops=loops, signature=func.signature,
     #                 name=func.name, ghost=unify_variables_to_make_ghost(func))
-    return Function(cfg=cfg, nodes=new_nodes, loops=loops, signature=func.signature,
+    return Function(cfg=cfg,variables=func.variables | all_guard_vars, nodes=new_nodes, loops=loops, signature=func.signature,
                     name=func.name, ghost=func.ghost)

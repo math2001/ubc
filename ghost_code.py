@@ -401,4 +401,4 @@ def sprinkle_ghost_code(filename: str, func: nip.Function, unsafe_ctx: Mapping[s
     assert loops.keys() == func.loops.keys(
     ), "more work required: loop headers changed during conversion, need to keep ghost's loop invariant in sync"
 
-    return Function(name=func.name, nodes=new_nodes, cfg=cfg, loops=loops, ghost=func.ghost, signature=func.signature)
+    return Function(name=func.name, variables=func.variables ,nodes=new_nodes, cfg=cfg, loops=loops, ghost=func.ghost, signature=func.signature)

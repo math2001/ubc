@@ -815,6 +815,8 @@ class GhostlessFunction(Generic[VarNameKind, VarNameKind2]):
 
     # TODO: find good way to freeze dict and keep type hints
     nodes: Mapping[NodeName, Node[VarNameKind]]
+
+    variables: Set[ExprVarT[VarNameKind]]
     """
     Node name => Node
     """
@@ -924,7 +926,7 @@ class GhostlessFunction(Generic[VarNameKind, VarNameKind2]):
                               lh: expr_true for lh in self.loops.keys()},
                           )
         assert self.loops.keys() == ghost.loop_invariants.keys(), "loop invariants don't match"
-        return GenericFunction(name=self.name, nodes=self.nodes, loops=self.loops, signature=self.signature, cfg=self.cfg, ghost=ghost)
+        return GenericFunction(name=self.name, variables=self.variables, nodes=self.nodes, loops=self.loops, signature=self.signature, cfg=self.cfg, ghost=ghost)
 
 
 @dataclass(frozen=True)
@@ -1075,6 +1077,12 @@ def convert_function_metadata(func: syntax.Function) -> FunctionSignature[ProgVa
     return FunctionSignature(args, rets)
 
 
+def get_function_variables(nodes: Mapping[NodeName, Node[ProgVarName]]) -> Set[ExprVarT[ProgVarName]]: 
+    s: Set[ExprVarT[ProgVarName]] = set([]) 
+    for node in nodes.values():
+        s = s | used_variables_in_node(node)
+    return s
+
 def convert_function(func: syntax.Function) -> GhostlessFunction[ProgVarName, Any]:
     safe_nodes = convert_function_nodes(func.nodes)
     all_succs = abc_cfg.compute_all_successors_from_nodes(safe_nodes)
@@ -1085,5 +1093,6 @@ def convert_function(func: syntax.Function) -> GhostlessFunction[ProgVarName, An
         safe_nodes, cfg)
 
     metadata = convert_function_metadata(func)
+    variables = get_function_variables(safe_nodes)
 
-    return GhostlessFunction(cfg=cfg, nodes=safe_nodes, loops=loops, signature=metadata, name=func.name)
+    return GhostlessFunction(cfg=cfg, variables=variables, nodes=safe_nodes, loops=loops, signature=metadata, name=func.name)

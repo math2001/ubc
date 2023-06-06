@@ -34,7 +34,9 @@ def conjs(*xs: source.ExprT[source.VarNameKind]) -> source.ExprT[source.VarNameK
     # pyright is stupid, but mypy works it out (we only care about mypy)
     if len(xs) == 0:
         return T
-    return reduce(source.expr_and, xs)  # pyright: ignore
+
+    return source.ExprOp(source.type_bool, source.Operator.AND, xs)
+    # return reduce(source.expr_and, xs)  # pyright: ignore
 
 
 def i32(n: int) -> source.ExprNumT:

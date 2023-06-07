@@ -90,12 +90,12 @@ def make_state_update_for_node(node: source.Node[source.ProgVarName]) -> Iterato
 def make_protection_for_node(node: source.Node[source.ProgVarName]) -> Tuple[Set[source.ExprVarT[GuardVarName]],source.ExprT[GuardVarName]]:
     variables: Set[source.ExprVarT[GuardVarName]] = set([])
 
-    guards: Tuple[source.ExprT[GuardVarName]] = tuple(guard_var (v) for v in source.used_variables_in_node(node) if not source.is_loop_counter_name(v.name))
+    guards: Tuple[source.ExprVarT[GuardVarName], ...] = tuple([guard_var (v) for v in source.used_variables_in_node(node) if not source.is_loop_counter_name(v.name)])
     variables = set(guards)
     
-    return variables, source.ExprOp(source.type_bool, source.Operator.AND, guards)
+    # return variables, source.ExprOp(source.type_bool, source.Operator.AND, guards)
     # for now, we ignore short circuiting
-    # return (variables, reduce(source.expr_and, guards, source.expr_true))
+    return (variables, reduce(source.expr_and, guards, source.expr_true))
     # return (variables, reduce(source.expr_and, (guard_var(v) for v in source.used_variables_in_node(node) if not source.is_loop_counter_name(v.name)), source.expr_true))
 
 

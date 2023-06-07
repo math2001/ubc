@@ -61,7 +61,15 @@ def get_base_var(var: Var[BaseVarName]) -> BaseVar[BaseVarName]:
     return source.ExprVar(var.typ, var.name.base)
 
 
-def make_dsa_var(v: source.ExprVarT[BaseVarName], inc: IncarnationNum) -> source.ExprVarT[Incarnation[BaseVarName]]:
+def make_dsa_var(allowed_base_vars: Set[source.ExprVarT[BaseVarName]], v: source.ExprVarT[BaseVarName], inc: IncarnationNum) -> source.ExprVarT[Incarnation[BaseVarName]]:
+    if v not in allowed_base_vars:
+        print('--')
+        print(allowed_base_vars)
+        print('==')
+        print(v)
+        print('**')
+    assert v in allowed_base_vars
+
     return source.ExprVar(v.typ, Incarnation(v.name, inc))
 
 
@@ -159,7 +167,7 @@ def get_next_dsa_var_incarnation_number_from_context(s: DSABuilder, context: Map
     return IncarnationBase
 
 
-def apply_insertions(s: DSABuilder) -> None:
+def apply_insertions(func: ghost_code.Function, s: DSABuilder) -> None:
     j = 0
     for node_name, node_insertions in s.insertions.items():
         for pred_name in s.original_func.acyclic_preds_of(node_name):
@@ -176,7 +184,7 @@ def apply_insertions(s: DSABuilder) -> None:
 
                 old_incarnation_number = s.incarnations[pred_name][prog_var]
 
-                updates.append(source.Update(make_dsa_var(prog_var, new_incarnation_number),
+                updates.append(source.Update(make_dsa_var(func.variables, prog_var, new_incarnation_number),
                                              source.ExprVar(prog_var.typ, name=Incarnation(prog_var.name, old_incarnation_number))))
             if len(updates) == 0:
                 continue
@@ -271,7 +279,7 @@ def dsa(func: ghost_code.Function) -> Function:
     dsa_args: list[source.ExprVarT[Incarnation[source.ProgVarName |
                                                nip.GuardVarName]]] = []
     for arg in func.signature.parameters:
-        dsa_args.append(make_dsa_var(arg, IncarnationBase))
+        dsa_args.append(make_dsa_var(func.variables, arg, IncarnationBase))
         entry_context[arg] = IncarnationBase
 
     assert len(set(unpack_dsa_var_name(arg.name)[0] for arg in dsa_args)) == len(
@@ -329,6 +337,7 @@ def dsa(func: ghost_code.Function) -> Function:
                     s, current_node, target)
                 context[target] = fresh_incarnation_number
                 targets.append(make_dsa_var(
+                    func.variables,
                     target, fresh_incarnation_number))
 
             dsa_loop_targets[loop_header] = tuple(targets)
@@ -396,7 +405,7 @@ def dsa(func: ghost_code.Function) -> Function:
                 expr = apply_incarnations(context, upd.expr)
                 inc = get_next_dsa_var_incarnation_number_from_context(
                     s, context, upd.var)
-                dsa_var = make_dsa_var(upd.var, inc)
+                dsa_var = make_dsa_var(func.variables, upd.var, inc)
                 upds.append(source.Update(dsa_var, expr))
                 assert upd.var not in added_incarnations, "duplicate updates in BasicNode"
                 added_incarnations[upd.var] = dsa_var
@@ -418,7 +427,7 @@ def dsa(func: ghost_code.Function) -> Function:
             for ret in node.rets:
                 inc = get_next_dsa_var_incarnation_number_from_context(
                     s, context, ret)
-                rets.append(make_dsa_var(ret, inc))
+                rets.append(make_dsa_var(func.variables, ret, inc))
                 added_incarnations[ret] = rets[-1]
 
             s.dsa_nodes[current_node] = dataclasses.replace(   # type: ignore
@@ -441,7 +450,7 @@ def dsa(func: ghost_code.Function) -> Function:
             curr_node_incarnations[prog_var] = incarnation_number
         s.incarnations[current_node] = curr_node_incarnations
 
-    apply_insertions(s)
+    apply_insertions(func, s)
 
     # need to recompute the cfg from dsa_nodes
     all_succs = abc_cfg.compute_all_successors_from_nodes(s.dsa_nodes)
@@ -453,12 +462,20 @@ def dsa(func: ghost_code.Function) -> Function:
 
     assert loops.keys() == func.loops.keys()
 
-    print(s.incarnations)
+    # Tracking all generated variables so we can emit them in SMT
+    dsa_variables: Set[source.ExprVarT[Incarnation[nip.GuardVarName | source.ProgVarName]]] = set([])
+
+    # If all dsa variables were based from a valid BaseVarName => 
+    # all dsa variables are valid, so we can fill in the Function.variables using the incarnations
+    for _, dsa_base_inc_pairs in s.incarnations.items():
+        dsa_vars = set([make_dsa_var(func.variables, prg_name, inc) for prg_name, inc in dsa_base_inc_pairs.items()])
+        dsa_variables = dsa_variables | dsa_vars
 
     return Function(
         cfg=cfg,
         signature=source.FunctionSignature(
             tuple(dsa_args), func.signature.returns),
+        variables=dsa_variables,
         loops=loops,
         name=func.name,
         nodes=s.dsa_nodes,

@@ -103,7 +103,7 @@ def get_loop_count_target_var(loop: source.Loop[dsa.Incarnation[source.ProgVarNa
     assert False, "loop doesn't have a loop a counter automatically inserted by the c parser"
 
 
-def apply_incarnation_for_node(func: dsa.Function, n: source.NodeName, prog_var: source.ExprVarT[source.ProgVarName | nip.GuardVarName]) -> APVar:
+# def apply_incarnation_for_node(func: dsa.Function, n: source.NodeName, prog_var: source.ExprVarT[source.ProgVarName | nip.GuardVarName]) -> APVar:
     # if a variable isn't defined at that node, we use an arbitrary value
     #
     # THIS IS A POTENTIAL SOURCE OF UNSOUDNESS
@@ -133,9 +133,9 @@ def apply_incarnation_for_node(func: dsa.Function, n: source.NodeName, prog_var:
     # Argument for correctness: if the loop invariant holds for an arbitrary value
     # of a, then it will hold for all concrete values during execution.
 
-    if prog_var not in func.contexts[n]:
-        return source.ExprVar(prog_var.typ, VarName(f'{prog_var.name}_arbitrary#node{n}'))
-    return convert_expr_var(dsa.make_dsa_var(prog_var, func.contexts[n][prog_var]))
+    # if prog_var not in func.contexts[n]:
+    #     return source.ExprVar(prog_var.typ, VarName(f'{prog_var.name}_arbitrary#node{n}'))
+    # return convert_expr_var(dsa.make_dsa_var(prog_var, func.contexts[n][prog_var]))
 
 
 def make_assume_prove_script_for_node(func: dsa.Function, n: source.NodeName) -> Script:

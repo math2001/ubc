@@ -178,6 +178,10 @@ def pretty_type_ascii(typ: Type) -> str:
 
 type_bool: Type = TypeBuiltin(Builtin.BOOL)
 type_mem: Type = TypeBuiltin(Builtin.MEM)
+type_htd: Type = TypeBuiltin(Builtin.HTD)
+type_pms: Type = TypeBuiltin(Builtin.PMS)
+# TODO: change this
+type_ghost: Type = TypeWordArray(50, 64)
 type_word8 = TypeBitVec(8)
 type_word16 = TypeBitVec(16)
 type_word32 = TypeBitVec(32)
@@ -1094,5 +1098,14 @@ def convert_function(func: syntax.Function) -> GhostlessFunction[ProgVarName, An
 
     metadata = convert_function_metadata(func)
     variables = get_function_variables(safe_nodes)
+    variables = variables | {ExprVar(type_mem, ProgVarName('Mem'))}
+    variables = variables | {ExprVar(type_htd, ProgVarName('HTD'))}
+    variables = variables | {ExprVar(type_pms, ProgVarName('PMS'))}
+    variables = variables | {ExprVar(type_ghost, ProgVarName('GhostAssertions'))}
+    
+    for spec_gh_var in spec_ghosts:
+        spec_var = mk_spec_ghost_var(spec_gh_var)
+        variables = variables | {spec_var}
+    print(variables)
 
     return GhostlessFunction(cfg=cfg, variables=variables, nodes=safe_nodes, loops=loops, signature=metadata, name=func.name)

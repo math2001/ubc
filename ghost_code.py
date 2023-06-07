@@ -2,7 +2,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import dataclasses
 from enum import Enum, unique
-from typing import Callable, Iterable, Mapping, NamedTuple, Sequence, Tuple, Any, Iterator, Dict, TypeAlias
+from typing import Callable, Iterable, Mapping, NamedTuple, Sequence, Tuple, Any, Iterator, Dict, TypeAlias, Set
 from typing_extensions import assert_never
 
 import abc_cfg
@@ -65,7 +65,6 @@ Function = GenericFunction[source.ProgVarName |
 class Insertion(NamedTuple):
     after: source.NodeName
     before: source.NodeName
-
     node_name: source.NodeName
     mk_node: Callable[[source.NodeName],
                       source.Node[source.ProgVarName | nip.GuardVarName]]
@@ -168,8 +167,8 @@ class Mode(Enum):
 
 NUM_GHOST_VARIABLES_CPARSER_FUNCTION_CALL = 4  # mem, htd, pms, ghost assertions
 
-
-def sprinkle_subject_pre_and_post_conditions(func: nip.Function) -> Iterable[Insertion]:
+# new_variables mutates
+def sprinkle_subject_pre_and_post_conditions(func: nip.Function, new_variables: Set[source.ExprVarT[GhostVarName]]) -> Iterable[Insertion]:
     """
     We assume the precondition holds, stash the initial values with the
     suffix /subject-arg of all the arguments, and then assert that the post
@@ -180,9 +179,18 @@ def sprinkle_subject_pre_and_post_conditions(func: nip.Function) -> Iterable[Ins
     entry_node = func.nodes[func.cfg.entry]
     assert isinstance(entry_node, source.NodeEmpty)
 
+
+    stash_updates = ()
+
+    for param in func.signature.parameters:
+        var = source.ExprVar(param.typ, SubjectArgVarName(param.name + '/subject-arg'))
+        # track all newly introduced variables
+        new_variables.add(var)
+        stash_updates = stash_updates + (source.Update(var, param),)
+
     # a1/subject-arg = a1; a2/subject-arg = a2, ... (for all arguments)
-    stash_updates = tuple(source.Update(source.ExprVar(param.typ, SubjectArgVarName(param.name + '/subject-arg')), param)
-                          for param in func.signature.parameters)
+    # stash_updates = tuple(source.Update(source.ExprVar(param.typ, SubjectArgVarName(param.name + '/subject-arg')), param)
+    #                       for param in func.signature.parameters)
 
     yield Insertion(after=func.cfg.entry,
                     before=entry_node.succ,
@@ -286,6 +294,7 @@ def sprinkle_loop_invariants(func: nip.Function) -> Iterable[Insertion]:
 def sprinkle_function_call_pre_and_post_condition(func: nip.Function,
                                                   node_name: source.NodeName,
                                                   node: source.NodeCall[source.ProgVarName | nip.GuardVarName],
+                                                  new_variables: Set[source.ExprVarT[GhostVarName]],
                                                   signatures: Mapping[str, TemporaryFunctionSignature]) -> Iterable[Insertion]:
 
     # the parameters are the "variable" in a method definition
@@ -293,8 +302,11 @@ def sprinkle_function_call_pre_and_post_condition(func: nip.Function,
     # (you define the parameters, you make the arguments)
     params = signatures[node.fname].parameters
     assert len(node.args) == len(params)
-    call_stash_updates = tuple(source.Update(source.ExprVar(param.typ, CallArgVarName(param.name + '/call-arg')), arg)
-                               for param, arg in zip(params, node.args))
+    call_stash_updates = ()
+    for param, arg in zip(params, node.args):
+        exprVar = source.ExprVar(param.typ, CallArgVarName(param.name + "/call-arg"))
+        new_variables.add(exprVar)
+        call_stash_updates = call_stash_updates + (source.Update(exprVar, arg),)
 
     def f(var: source.ExprVarT[source.ProgVarName | nip.GuardVarName]) -> source.ExprVarT[source.ProgVarName | nip.GuardVarName]:
         # this will change with the new way of writing specs
@@ -341,11 +353,12 @@ def sprinkle_function_call_pre_and_post_condition(func: nip.Function,
 
 
 def sprinkle_function_call_pre_and_post_conditions(func: nip.Function,
+                                                   new_variables: Set[source.ExprVarT[GhostVarName]],
                                                    signatures: Mapping[str, TemporaryFunctionSignature]) -> Iterable[Insertion]:
     for node_name in func.traverse_topologically(skip_err_and_ret=True):
         node = func.nodes[node_name]
         if isinstance(node, source.NodeCall):
-            yield from sprinkle_function_call_pre_and_post_condition(func, node_name, node, signatures)
+            yield from sprinkle_function_call_pre_and_post_condition(func, node_name, node, new_variables, signatures)
 
 
 @dataclass(frozen=True, slots=True)
@@ -385,12 +398,13 @@ def sprinkle_ghost_code(filename: str, func: nip.Function, unsafe_ctx: Mapping[s
         ctx[fname] = TemporaryFunctionSignature(parameters=sig.parameters,
                                                 returns=sig.returns,
                                                 precondition=precondition,
-                                                postcondition=postcondition)
+                                              postcondition=postcondition)
 
+    new_variables: Set[source.ExprVarT[GhostVarName]] = set([])
     insertions: list[Insertion] = []
-    insertions.extend(sprinkle_subject_pre_and_post_conditions(func))
+    insertions.extend(sprinkle_subject_pre_and_post_conditions(func, new_variables))
     insertions.extend(
-        sprinkle_function_call_pre_and_post_conditions(func, ctx))
+        sprinkle_function_call_pre_and_post_conditions(func, new_variables, ctx))
     insertions.extend(sprinkle_loop_invariants(func))
 
     new_nodes = apply_insertions(func, insertions)
@@ -401,4 +415,4 @@ def sprinkle_ghost_code(filename: str, func: nip.Function, unsafe_ctx: Mapping[s
     assert loops.keys() == func.loops.keys(
     ), "more work required: loop headers changed during conversion, need to keep ghost's loop invariant in sync"
 
-    return Function(name=func.name, variables=func.variables ,nodes=new_nodes, cfg=cfg, loops=loops, ghost=func.ghost, signature=func.signature)
+    return Function(name=func.name, variables=func.variables | new_variables ,nodes=new_nodes, cfg=cfg, loops=loops, ghost=func.ghost, signature=func.signature)

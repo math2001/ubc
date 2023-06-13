@@ -18,7 +18,7 @@ from functools import reduce
 import abc_cfg
 from typing import Any, Callable, Iterator, Mapping, NewType, Sequence, Set, TypeAlias, overload, Tuple
 from typing_extensions import assert_never
-from provenance import ProvenanceNipGuard, ProvenanceNipUpdate
+from provenance import Provenance
 import source
 
 
@@ -69,10 +69,12 @@ def var_deps(expr: source.ExprT[source.ProgVarName]) -> source.ExprT[GuardVarNam
     return reduce(source.expr_and, map(guard_var, source.all_vars_in_expr(expr)), source.expr_true)
 
 
-def make_state_update_for_node(node: source.Node[source.ProgVarName]) -> Iterator[source.Update[GuardVarName]]:
+def make_state_update_for_node(node: source.Node[source.ProgVarName], new_variables: Set[source.ExprVarT[GuardVarName]]) -> Iterator[source.Update[GuardVarName]]:
     if isinstance(node, source.NodeBasic):
         for upd in node.upds:
             if not source.is_loop_counter_name(upd.var.name):
+                # new variables go in LHS
+                new_variables.add(guard_var(upd.var))
                 yield source.Update(guard_var(upd.var), var_deps(upd.expr))
     elif isinstance(node, source.NodeCall):
         deps = reduce(source.expr_and, (var_deps(arg)
@@ -80,6 +82,7 @@ def make_state_update_for_node(node: source.Node[source.ProgVarName]) -> Iterato
         for ret in node.rets:
             assert not source.is_loop_counter_name(
                 ret.name), "didn't expect a return value to be a loop counter"
+            new_variables.add(guard_var(ret))  # new variables go in LHS
             yield source.Update(guard_var(ret), deps)
     else:
         assert not isinstance(node, source.NodeEmpty | source.NodeCond |
@@ -87,24 +90,26 @@ def make_state_update_for_node(node: source.Node[source.ProgVarName]) -> Iterato
         assert_never(node)
 
 
-def make_protection_for_node(node: source.Node[source.ProgVarName]) -> Tuple[Set[source.ExprVarT[GuardVarName]],source.ExprT[GuardVarName]]:
+def make_protection_for_node(node: source.Node[source.ProgVarName]) -> Tuple[Set[source.ExprVarT[GuardVarName]], source.ExprT[GuardVarName]]:
     variables: Set[source.ExprVarT[GuardVarName]] = set([])
-
-    guards: Tuple[source.ExprVarT[GuardVarName], ...] = tuple([guard_var (v) for v in source.used_variables_in_node(node) if not source.is_loop_counter_name(v.name)])
+    guards: Tuple[source.ExprVarT[GuardVarName], ...] = tuple([guard_var(
+        v) for v in source.used_variables_in_node(node) if not source.is_loop_counter_name(v.name)])
     variables = set(guards)
-    
+
     # return variables, source.ExprOp(source.type_bool, source.Operator.AND, guards)
     # for now, we ignore short circuiting
     return (variables, reduce(source.expr_and, guards, source.expr_true))
     # return (variables, reduce(source.expr_and, (guard_var(v) for v in source.used_variables_in_node(node) if not source.is_loop_counter_name(v.name)), source.expr_true))
 
 
-def make_initial_state(func: source.Function) -> Iterator[source.Update[GuardVarName]]:
+def make_initial_state(func: source.Function, new_variables: Set[source.ExprVarT[GuardVarName]]) -> Iterator[source.Update[GuardVarName]]:
     # TODO: globals
     for arg in func.signature.parameters:
+        new_variables.add(guard_var(arg))
         yield source.Update(guard_var(arg), source.expr_true)
 
     for other in func.all_variables() - set(func.signature.parameters):
+        new_variables.add(guard_var(other))
         yield source.Update(guard_var(other), source.expr_false)
 
 
@@ -199,8 +204,10 @@ def nip(func: source.Function) -> Function:
     state_updates: dict[source.NodeName,
                         tuple[source.Update[GuardVarName], ...]] = {}
 
-    state_updates[func.cfg.entry] = tuple(make_initial_state(func))
     all_guard_vars: Set[source.ExprVarT[GuardVarName]] = set([])
+
+    state_updates[func.cfg.entry] = tuple(
+        make_initial_state(func, all_guard_vars))
     for n in func.traverse_topologically(skip_err_and_ret=True):
         node = func.nodes[n]
         if isinstance(node, source.NodeBasic | source.NodeCall | source.NodeCond):
@@ -217,7 +224,7 @@ def nip(func: source.Function) -> Function:
 
         if isinstance(node, source.NodeBasic | source.NodeCall):
             assert n not in state_updates
-            upds = tuple(make_state_update_for_node(node))
+            upds = tuple(make_state_update_for_node(node, all_guard_vars))
             if len(upds) > 0:
                 state_updates[n] = upds
         elif not isinstance(node, source.NodeEmpty | source.NodeCond):
@@ -259,7 +266,7 @@ def nip(func: source.Function) -> Function:
 
                 assert protection_name not in new_nodes, protection_name
                 new_nodes[protection_name] = NodeGuard(
-                    ProvenanceNipGuard(),
+                    Provenance.NIP_GUARD,
                     protections[succ], succ_then=succ, succ_else=source.NodeNameErr)
 
         # insert successors
@@ -272,7 +279,7 @@ def nip(func: source.Function) -> Function:
             assert len(jump_to) == 1
             update_name = source.NodeName(f'upd_n{n}')
             new_nodes[update_name] = NodeStateUpdate(
-                ProvenanceNipUpdate(),
+                Provenance.NIP_UPDATE,
                 state_updates[n], jump_to[0])
             jump_to[0] = update_name
 
@@ -282,7 +289,7 @@ def nip(func: source.Function) -> Function:
     cfg = abc_cfg.compute_cfg_from_all_succs(all_succs, func.cfg.entry)
     loops = abc_cfg.compute_loops(
         new_nodes, cfg)
-    
+
     print(set(loops.keys()) - set(func.loops.keys()))
 
     assert loops.keys() == func.loops.keys(
@@ -290,5 +297,5 @@ def nip(func: source.Function) -> Function:
 
     # return Function(cfg=cfg, nodes=new_nodes, loops=loops, signature=func.signature,
     #                 name=func.name, ghost=unify_variables_to_make_ghost(func))
-    return Function(cfg=cfg,variables=func.variables | all_guard_vars, nodes=new_nodes, loops=loops, signature=func.signature,
+    return Function(cfg=cfg, variables=func.variables | all_guard_vars, nodes=new_nodes, loops=loops, signature=func.signature,
                     name=func.name, ghost=func.ghost)

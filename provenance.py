@@ -1,52 +1,17 @@
-from typing import NamedTuple
+from enum import Enum, unique
 
 
-class ProvenanceGraphLang(NamedTuple):
-    pass
-
-
-class ProvenanceNipGuard(NamedTuple):
-    pass
-
-
-class ProvenanceNipUpdate(NamedTuple):
-    pass
-
-
-class ProvenanceDSAJoiner(NamedTuple):
-    pass
-
-
-class ProvenancePreCondFnObligation(NamedTuple):
-    pass
-
-
-class ProvenancePostCondFnAssume(NamedTuple):
-    pass
-
-
-class ProvenancePreCond(NamedTuple):
-    pass
-
-
-class ProvenancePostCond(NamedTuple):
-    pass
-
-
-class ProvenanceLoopInvariantAssume(NamedTuple):
-    pass
-
-
-class ProvenanceLoopInvariantObligation(NamedTuple):
-    pass
-
-
-class ProvenanceCallStashInitialArgs(NamedTuple):
-    pass
-
-
-class ProvenanceCallStash(NamedTuple):
-    pass
-
-
-Provenance = ProvenanceGraphLang | ProvenanceNipGuard | ProvenanceNipUpdate | ProvenanceDSAJoiner | ProvenancePreCond | ProvenancePreCondFnObligation | ProvenancePostCondFnAssume | ProvenanceLoopInvariantAssume | ProvenanceLoopInvariantObligation | ProvenancePostCond | ProvenanceCallStashInitialArgs | ProvenanceCallStash
+@unique
+class Provenance(Enum):
+    GRAPHLANG = "GRAPHLANG"
+    NIP_GUARD = "NIP_GUARD"
+    NIP_UPDATE = "NIP_UPDATE"
+    DSA_JOINER = "DSA_JOINER"
+    PRE_COND_FN_OBLIGATION = "PRE_COND_FN_OBLIGATION"
+    POST_COND_FN_ASSUME = "POST_COND_FN_ASSUME"
+    PRE_COND = "PRE_COND"
+    POST_COND = "POST_COND"
+    LOOP_INV_ASSUME = "LOOP_INV_ASSUME"
+    LOOP_INV_OBLIGATION = "LOOP_INV_OBLIGATION"
+    CALL_STASH_INITIAL_ARGS = "CALL_STASH_INITIAL_ARGS"
+    CALL_STASH = "CALL_STASH"

@@ -2,7 +2,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import dataclasses
 from enum import Enum, unique
-from typing import Callable, Iterable, Mapping, NamedTuple, Sequence, Tuple, Any, Iterator, Dict, TypeAlias, Set
+from typing import Callable, Iterable, Mapping, NamedTuple, Sequence, Tuple, TypeAlias, Set
 from typing_extensions import assert_never
 
 import abc_cfg
@@ -168,6 +168,8 @@ class Mode(Enum):
 NUM_GHOST_VARIABLES_CPARSER_FUNCTION_CALL = 4  # mem, htd, pms, ghost assertions
 
 # new_variables mutates
+
+
 def sprinkle_subject_pre_and_post_conditions(func: nip.Function, new_variables: Set[source.ExprVarT[GhostVarName]]) -> Iterable[Insertion]:
     """
     We assume the precondition holds, stash the initial values with the
@@ -179,11 +181,12 @@ def sprinkle_subject_pre_and_post_conditions(func: nip.Function, new_variables: 
     entry_node = func.nodes[func.cfg.entry]
     assert isinstance(entry_node, source.NodeEmpty)
 
-
-    stash_updates = ()
+    stash_updates: Tuple[source.Update[source.ProgVarName |
+                                       nip.GuardVarName], ...] = ()
 
     for param in func.signature.parameters:
-        var = source.ExprVar(param.typ, SubjectArgVarName(param.name + '/subject-arg'))
+        var = source.ExprVar(param.typ, SubjectArgVarName(
+            param.name + '/subject-arg'))
         # track all newly introduced variables
         new_variables.add(var)
         stash_updates = stash_updates + (source.Update(var, param),)
@@ -195,7 +198,7 @@ def sprinkle_subject_pre_and_post_conditions(func: nip.Function, new_variables: 
     yield Insertion(after=func.cfg.entry,
                     before=entry_node.succ,
                     node_name=source.NodeName('stash_initial_args'),
-                    mk_node=lambda succ: source.NodeBasic(ProvenanceCallStashInitialArgs(), stash_updates, succ))
+                    mk_node=lambda succ: source.NodeBasic(Provenance.CALL_STASH_INITIAL_ARGS, stash_updates, succ))
 
     def f(var: source.ExprVarT[source.ProgVarName | nip.GuardVarName]) -> source.ExprVarT[source.ProgVarName | nip.GuardVarName]:
         # this will change with the new way of writting specs
@@ -209,7 +212,7 @@ def sprinkle_subject_pre_and_post_conditions(func: nip.Function, new_variables: 
     yield Insertion(after=func.cfg.entry,
                     before=entry_node.succ,
                     node_name=source.NodeName('pre_condition'),
-                    mk_node=lambda succ: NodePreconditionAssumption(ProvenancePreCond(), precondition, succ))
+                    mk_node=lambda succ: NodePreconditionAssumption(Provenance.PRE_COND, precondition, succ))
 
     def g(var: source.ExprVarT[source.ProgVarName | nip.GuardVarName]) -> source.ExprVarT[source.ProgVarName | nip.GuardVarName]:
         # this will be cleaned up when we implement the new way of writting specs
@@ -231,7 +234,7 @@ def sprinkle_subject_pre_and_post_conditions(func: nip.Function, new_variables: 
     yield Insertion(after=pred,
                     before=source.NodeNameRet,
                     node_name=source.NodeName('post_condition'),
-                    mk_node=lambda succ: NodePostConditionProofObligation(ProvenancePostCond(), converted_post_condition, succ, source.NodeNameErr))
+                    mk_node=lambda succ: NodePostConditionProofObligation(Provenance.POST_COND, converted_post_condition, succ, source.NodeNameErr))
 
 
 def sprinkle_loop_invariant(func: nip.Function, lh: source.LoopHeaderName) -> Iterable[Insertion]:
@@ -268,7 +271,7 @@ def sprinkle_loop_invariant(func: nip.Function, lh: source.LoopHeaderName) -> It
                         before=lh,
                         node_name=source.NodeName(f'loop_{lh}_latch_{i}'),
                         mk_node=lambda succ: NodeLoopInvariantProofObligation(
-                            ProvenanceLoopInvariantObligation(),
+                            Provenance.LOOP_INV_OBLIGATION,
                             inv,
                             succ,
                             source.NodeNameErr
@@ -279,7 +282,7 @@ def sprinkle_loop_invariant(func: nip.Function, lh: source.LoopHeaderName) -> It
                         before=nsucc,
                         node_name=source.NodeName(f'loop_{lh}_inv_asm_{i}'),
                         mk_node=lambda succ: NodeLoopInvariantAssumption(
-                            ProvenanceLoopInvariantAssume(),
+                            Provenance.LOOP_INV_ASSUME,
                             inv,
                             succ))
 
@@ -302,11 +305,14 @@ def sprinkle_function_call_pre_and_post_condition(func: nip.Function,
     # (you define the parameters, you make the arguments)
     params = signatures[node.fname].parameters
     assert len(node.args) == len(params)
-    call_stash_updates = ()
+    call_stash_updates: Tuple[source.Update[source.ProgVarName |
+                                            nip.GuardVarName], ...] = ()
     for param, arg in zip(params, node.args):
-        exprVar = source.ExprVar(param.typ, CallArgVarName(param.name + "/call-arg"))
+        exprVar = source.ExprVar(
+            param.typ, CallArgVarName(param.name + "/call-arg"))
         new_variables.add(exprVar)
-        call_stash_updates = call_stash_updates + (source.Update(exprVar, arg),)
+        call_stash_updates = call_stash_updates + \
+            (source.Update(exprVar, arg),)
 
     def f(var: source.ExprVarT[source.ProgVarName | nip.GuardVarName]) -> source.ExprVarT[source.ProgVarName | nip.GuardVarName]:
         # this will change with the new way of writing specs
@@ -320,7 +326,7 @@ def sprinkle_function_call_pre_and_post_condition(func: nip.Function,
                         before=node_name,
                         node_name=source.NodeName(
                             f'call_stash_{node_name}_pred_{i}'),
-                        mk_node=lambda succ: source.NodeBasic(ProvenanceCallStash(), call_stash_updates, succ))
+                        mk_node=lambda succ: source.NodeBasic(Provenance.CALL_STASH, call_stash_updates, succ))
 
         precond = source.convert_expr_vars(
             f, signatures[node.fname].precondition)
@@ -328,7 +334,7 @@ def sprinkle_function_call_pre_and_post_condition(func: nip.Function,
                         before=node_name,
                         node_name=source.NodeName(
                             f'call_pre_{node_name}_pred_{i}'),
-                        mk_node=lambda succ: NodePrecondObligationFnCall(ProvenancePreCondFnObligation(), precond, succ))
+                        mk_node=lambda succ: NodePrecondObligationFnCall(Provenance.PRE_COND_FN_OBLIGATION, precond, succ))
 
     rets = node.rets  # pyright isn't smart enough
 
@@ -347,7 +353,7 @@ def sprinkle_function_call_pre_and_post_condition(func: nip.Function,
                     before=node.succ,
                     node_name=source.NodeName(f'call_post_{node_name}'),
                     mk_node=lambda succ: NodeAssumePostCondFnCall(
-                        ProvenancePostCondFnAssume(),
+                        Provenance.POST_COND_FN_ASSUME,
                         postcond,
                         succ))
 
@@ -398,11 +404,12 @@ def sprinkle_ghost_code(filename: str, func: nip.Function, unsafe_ctx: Mapping[s
         ctx[fname] = TemporaryFunctionSignature(parameters=sig.parameters,
                                                 returns=sig.returns,
                                                 precondition=precondition,
-                                              postcondition=postcondition)
+                                                postcondition=postcondition)
 
     new_variables: Set[source.ExprVarT[GhostVarName]] = set([])
     insertions: list[Insertion] = []
-    insertions.extend(sprinkle_subject_pre_and_post_conditions(func, new_variables))
+    insertions.extend(
+        sprinkle_subject_pre_and_post_conditions(func, new_variables))
     insertions.extend(
         sprinkle_function_call_pre_and_post_conditions(func, new_variables, ctx))
     insertions.extend(sprinkle_loop_invariants(func))
@@ -415,4 +422,4 @@ def sprinkle_ghost_code(filename: str, func: nip.Function, unsafe_ctx: Mapping[s
     assert loops.keys() == func.loops.keys(
     ), "more work required: loop headers changed during conversion, need to keep ghost's loop invariant in sync"
 
-    return Function(name=func.name, variables=func.variables | new_variables ,nodes=new_nodes, cfg=cfg, loops=loops, ghost=func.ghost, signature=func.signature)
+    return Function(name=func.name, variables=func.variables | new_variables, nodes=new_nodes, cfg=cfg, loops=loops, ghost=func.ghost, signature=func.signature)

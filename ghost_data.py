@@ -65,8 +65,10 @@ def g(var: source.ExprVarT[source.ProgVarName] | str) -> source.ExprVarT[nip.Gua
         return source.ExprVar(source.type_bool, nip.guard_name(source.ProgVarName(var)))
     return source.ExprVar(source.type_bool, nip.guard_name(source.ProgVarName(var.name)))
 
+
 def charv(n: str) -> source.ExprVarT[source.ProgVarName]:
-    return source.ExprVar(source.type_word8, source.ProgVarName(n)) 
+    return source.ExprVar(source.type_word8, source.ProgVarName(n))
+
 
 def char(n: int) -> source.ExprNumT:
     return source.ExprNum(source.type_word8, n)
@@ -76,6 +78,7 @@ def char(n: int) -> source.ExprNumT:
 
 # i64ret = source.ExprVar(source.type_word64, source.HumanVarName(
 #     source.HumanVarNameSpecial.RET, use_guard=False, path=()))
+
 
 i32ret = source.ExprVar(source.type_word32, source.CRetSpecialVar("c_ret.0"))
 i32ret.name.field_num = 0
@@ -118,6 +121,7 @@ C_msg_info_valid = source.FunctionName('C_msg_info_valid')
 
 C_channel_valid = source.FunctionName('C_channel_valid')
 
+
 def htd_assigned() -> source.ExprVarT[nip.GuardVarName]:
     return g(source.ExprVar(source.type_bool, source.ProgVarName('HTD')))
 
@@ -136,7 +140,6 @@ def ghost_asserts_assigned() -> source.ExprVarT[nip.GuardVarName]:
 
 def arg(v: source.ExprVarT[source.ProgVarName]) -> source.ExprVarT[source.ProgVarName]:
     return source.ExprVar(v.typ, source.ProgVarName(v.name + "/arg"))
-
 
 
 universe: Mapping[str, Mapping[str, source.Ghost[source.ProgVarName | nip.GuardVarName]]] = {
@@ -296,33 +299,33 @@ universe: Mapping[str, Mapping[str, source.Ghost[source.ProgVarName | nip.GuardV
     },
     "tests/libsel4cp_trunc.txt": {
         "libsel4cp.handler_loop": source.Ghost(loop_invariants={
-                lh('3'): conjs(
-                    source.expr_implies(
-                        neq(charv('have_reply'), char(0)), 
-                        eq(g('reply_tag'), T), 
-                    ), 
-                    source.expr_implies(
-                        eq(g('is_endpoint'), T), 
-                        eq(
-                            neq(i64v('is_endpoint'), i64(0)), 
-                            neq(charv('have_reply'), char(0))
-                        )
-                    ), 
-                    eq(htd_assigned(), T), 
-                    eq(mem_assigned(), T), 
-                    eq(pms_assigned(), T), 
-                    eq(ghost_asserts_assigned(), T), 
-                    eq(g('have_reply'), T), 
+            lh('3'): conjs(
+                source.expr_implies(
+                    neq(charv('have_reply'), char(0)),
+                    eq(g('reply_tag'), T),
                 ),
-                lh('10'): conjs(
-                    eq(i64v('is_endpoint'), i64(0)), 
-                    eq(g('badge'), T), 
-                    eq(g('idx'), T), 
-                    eq(htd_assigned(), T), 
-                    eq(mem_assigned(), T), 
-                    eq(pms_assigned(), T), 
-                    eq(ghost_asserts_assigned(), T)
-                )
+                source.expr_implies(
+                    eq(g('is_endpoint'), T),
+                    eq(
+                        neq(i64v('is_endpoint'), i64(0)),
+                        neq(charv('have_reply'), char(0))
+                    )
+                ),
+                eq(htd_assigned(), T),
+                eq(mem_assigned(), T),
+                eq(pms_assigned(), T),
+                eq(ghost_asserts_assigned(), T),
+                eq(g('have_reply'), T),
+            ),
+            lh('10'): conjs(
+                eq(i64v('is_endpoint'), i64(0)),
+                eq(g('badge'), T),
+                eq(g('idx'), T),
+                eq(htd_assigned(), T),
+                eq(mem_assigned(), T),
+                eq(pms_assigned(), T),
+                eq(ghost_asserts_assigned(), T)
+            )
         }, precondition=T, postcondition=T)
     }
     # "tests/libsel4cp_trunc.txt": {

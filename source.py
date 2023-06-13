@@ -1041,11 +1041,11 @@ def convert_function_nodes(nodes: Mapping[str | int, syntax.Node]) -> Mapping[No
                         var=ExprVarT[ProgVarName](
                             convert_type(var[1]), ProgVarName(var[0])),
                         expr=convert_expr(expr)))
-                safe_nodes[name] = NodeBasic(origin=ProvenanceGraphLang(), upds=tuple(
+                safe_nodes[name] = NodeBasic(origin=Provenance.GRAPHLANG, upds=tuple(
                     upds), succ=NodeName(str(node.cont)))
         elif node.kind == "Call":
             safe_nodes[name] = NodeCall(
-                origin=ProvenanceGraphLang(),
+                origin=Provenance.GRAPHLANG,
                 succ=NodeName(str(node.cont)),
                 fname=node.fname,
                 args=tuple(convert_expr(arg) for arg in node.args)
@@ -1056,7 +1056,7 @@ def convert_function_nodes(nodes: Mapping[str | int, syntax.Node]) -> Mapping[No
 
         elif node.kind == "Cond":
             safe_nodes[name] = NodeCond(
-                origin=ProvenanceGraphLang(),
+                origin=Provenance.GRAPHLANG,
                 succ_then=NodeName(str(node.left)), succ_else=NodeName(str(node.right)), expr=convert_expr(node.cond))
         else:
             raise ValueError(f"unknown kind {node.kind!r}")
@@ -1081,11 +1081,14 @@ def convert_function_metadata(func: syntax.Function) -> FunctionSignature[ProgVa
     return FunctionSignature(args, rets)
 
 
-def get_function_variables(nodes: Mapping[NodeName, Node[ProgVarName]]) -> Set[ExprVarT[ProgVarName]]: 
-    s: Set[ExprVarT[ProgVarName]] = set([]) 
-    for node in nodes.values():
+def get_function_variables(func: GhostlessFunction[ProgVarName, Any], nodes: Mapping[NodeName, Node[ProgVarName]]) -> Set[ExprVarT[ProgVarName]]:
+    s: Set[ExprVarT[ProgVarName]] = set([])
+    for node_name, node in nodes.items():
         s = s | used_variables_in_node(node)
+        s = s | assigned_variables_in_node(
+            func, node_name, with_loop_targets=True)
     return s
+
 
 def convert_function(func: syntax.Function) -> GhostlessFunction[ProgVarName, Any]:
     safe_nodes = convert_function_nodes(func.nodes)
@@ -1097,15 +1100,24 @@ def convert_function(func: syntax.Function) -> GhostlessFunction[ProgVarName, An
         safe_nodes, cfg)
 
     metadata = convert_function_metadata(func)
-    variables = get_function_variables(safe_nodes)
+
+    # fn without any variables obtained
+    tmpfn: GhostlessFunction[ProgVarName, Any] = GhostlessFunction(cfg=cfg, variables=set(
+        []), nodes=safe_nodes, loops=loops, signature=metadata, name=func.name)
+
+    # Insert all variables here
+    variables = get_function_variables(tmpfn, safe_nodes)
     variables = variables | {ExprVar(type_mem, ProgVarName('Mem'))}
     variables = variables | {ExprVar(type_htd, ProgVarName('HTD'))}
     variables = variables | {ExprVar(type_pms, ProgVarName('PMS'))}
-    variables = variables | {ExprVar(type_ghost, ProgVarName('GhostAssertions'))}
-    
+    variables = variables | {
+        ExprVar(type_ghost, ProgVarName('GhostAssertions'))}
+
+    variables = variables | set(metadata.returns)
+    variables = variables | set(metadata.parameters)
+
     for spec_gh_var in spec_ghosts:
         spec_var = mk_spec_ghost_var(spec_gh_var)
         variables = variables | {spec_var}
-    print(variables)
 
     return GhostlessFunction(cfg=cfg, variables=variables, nodes=safe_nodes, loops=loops, signature=metadata, name=func.name)

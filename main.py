@@ -302,5 +302,8 @@ def main() -> None:
     run(args.file, args.fnames, options, args.preludes)
 
 
-if __name__ == "__main__":
-    main()
+# if __name__ == "__main__":
+#     main()
+
+# print("HERE WE ARE")
+main()

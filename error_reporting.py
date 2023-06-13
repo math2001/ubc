@@ -1,7 +1,7 @@
 import sys
 import dsa
 import assume_prove as ap
-from typing import Callable, NamedTuple, Optional, Set, Tuple, Sequence
+from typing import Callable, Optional, Set, Tuple, Sequence
 from typing_extensions import assert_never
 import source
 import smt
@@ -14,6 +14,7 @@ import parser_combinator as pc
 from dot_graph import pretty_safe_expr, pretty_safe_update
 import smt_parser
 import ghost_code
+from enum import Enum, unique
 from rich.console import Console
 
 econsole = Console(stderr=True)
@@ -29,47 +30,18 @@ def eprint(*args, **kwargs) -> None:  # type: ignore
     econsole.print(*args, **kwargs)
 
 
-class OverflowFailure(NamedTuple):
-    pass
-
-
-class UnderflowFailure(NamedTuple):
-    pass
-
-
-class OverOrUnderflowFailure(NamedTuple):
-    pass
-
-
-class UnknownFailure(NamedTuple):
-    pass
-
-
-class UnInitialised(NamedTuple):
-    pass
-
-
-class UnAlignedMemory(NamedTuple):
-    pass
-
-
-class InvalidMemory(NamedTuple):
-    pass
-
-
-class NodeCallPreCondFailure(NamedTuple):
-    pass
-
-
-class LoopInvariantObligFailure(NamedTuple):
-    pass
-
-
-class FnPostCondFailure(NamedTuple):
-    pass
-
-
-FailureReason = OverflowFailure | UnderflowFailure | UnknownFailure | OverOrUnderflowFailure | UnInitialised | UnAlignedMemory | InvalidMemory | LoopInvariantObligFailure | NodeCallPreCondFailure | FnPostCondFailure
+@unique
+class FailureReason(Enum):
+    OverflowFailure = "OverflowFailure"
+    UnderflowFailure = "UnderflowFailure"
+    OverOrUnderflowFailure = "OverOrUnderflowFailure"
+    UnInitialised = "UnInitialised"
+    UnAlignedMemory = "UnAlignedMemory"
+    InvalidMemory = "InvalidMemory"
+    LoopInvariantObligFailure = "LoopInvariantObligFailure"
+    NodeCallPreCondFailure = "NodeCallPreCondFailure"
+    FnPostCondFailure = "FnPostCondFailure"
+    UnknownFailure = "UnknownFailure"
 
 
 def expr_common_arith() -> Set[source.Operator]:
@@ -131,70 +103,70 @@ def determine_reason(node: DSANode) -> FailureReason:
     assert not isinstance(node, source.NodeEmpty)
     if isinstance(node, source.NodeEmpty):
         # We really shouldn't see this.
-        return UnknownFailure()
-    elif isinstance(node.origin, ProvenanceNipGuard):
-        return UnInitialised()
-    elif isinstance(node.origin, ProvenanceGraphLang):
+        return FailureReason.UnknownFailure
+    elif node.origin == Provenance.NIP_GUARD:
+        return FailureReason.UnInitialised
+    elif node.origin == Provenance.GRAPHLANG:
         assert isinstance(node, source.NodeCond)
         if expr_all_adds(node.expr):
-            return OverflowFailure()
+            return FailureReason.OverflowFailure
         elif expr_all_subtract(node.expr):
-            return UnderflowFailure()
+            return FailureReason.UnderflowFailure
         elif expr_all_arith(node.expr):
-            return OverOrUnderflowFailure()
+            return FailureReason.OverOrUnderflowFailure
         elif expr_all_pointeralignops(node.expr):
-            return UnAlignedMemory()
+            return FailureReason.UnAlignedMemory
         elif expr_all_pointervalidops(node.expr):
-            return InvalidMemory()
+            return FailureReason.InvalidMemory
         else:
-            return UnknownFailure()
-    elif isinstance(node.origin, ProvenancePreCond):
+            return FailureReason.UnknownFailure
+    elif node.origin == Provenance.PRE_COND:
         assert False, "didn't expect to determine a pre cond node as the failure reason"
-    elif isinstance(node.origin, ProvenanceLoopInvariantObligation):
-        return LoopInvariantObligFailure()
-    elif isinstance(node.origin, ProvenanceNipUpdate):
+    elif node.origin == Provenance.LOOP_INV_OBLIGATION:
+        return FailureReason.LoopInvariantObligFailure
+    elif node.origin == Provenance.NIP_UPDATE:
         assert False, "didn't expect to see a nip update as being the failure reason"
-    elif isinstance(node.origin, ProvenanceDSAJoiner):
+    elif node.origin == Provenance.DSA_JOINER:
         assert False, "didn't expect to see dsa joiner as being the failure reason"
-    elif isinstance(node.origin, ProvenancePreCondFnObligation):
-        return NodeCallPreCondFailure()
-    elif isinstance(node.origin, ProvenancePostCondFnAssume):
+    elif node.origin == Provenance.PRE_COND_FN_OBLIGATION:
+        return FailureReason.NodeCallPreCondFailure
+    elif node.origin == Provenance.POST_COND_FN_ASSUME:
         assert False, "didn't expect to see a post condition assumption as being the failure reason"
-    elif isinstance(node.origin, ProvenanceLoopInvariantAssume):
+    elif node.origin == Provenance.LOOP_INV_ASSUME:
         assert False, "didn't expect to see a loop invariant assumption as being the failure reason"
-    elif isinstance(node.origin, ProvenancePostCond):
-        return FnPostCondFailure()
-    elif isinstance(node.origin, ProvenanceCallStash):
+    elif node.origin == Provenance.POST_COND:
+        return FailureReason.FnPostCondFailure
+    elif node.origin == Provenance.CALL_STASH:
         assert False, "didn't expect to see call stashing as being the failure reason"
-    elif isinstance(node.origin, ProvenanceCallStashInitialArgs):
+    elif node.origin == Provenance.CALL_STASH_INITIAL_ARGS:
         assert False, "didn't expect to see initial call stashing as being the failure reason"
     else:
-        assert_never(node.origin)
+        assert False, "unreachable"
 
 
 def print_reason(reason: FailureReason) -> None:
-    if isinstance(reason, UnInitialised):
+    if reason == FailureReason.UnInitialised:
         eprint("uninitialised variable")
-    elif isinstance(reason, UnknownFailure):
+    elif reason == FailureReason.UnknownFailure:
         eprint("unable to determine failure reason")
-    elif isinstance(reason, UnderflowFailure):
+    elif reason == FailureReason.UnderflowFailure:
         eprint("hint: variable likely underflows")
-    elif isinstance(reason, OverflowFailure):
+    elif reason == FailureReason.OverflowFailure:
         eprint("hint: variable likely overflows")
-    elif isinstance(reason, UnAlignedMemory):
+    elif reason == FailureReason.UnAlignedMemory:
         eprint("unaligned memory")
-    elif isinstance(reason, InvalidMemory):
+    elif reason == FailureReason.InvalidMemory:
         eprint("invalid memory")
-    elif isinstance(reason, OverOrUnderflowFailure):
+    elif reason == FailureReason.OverOrUnderflowFailure:
         eprint("hint: likely invalid arithmetic causing overflow or underflow")
-    elif isinstance(reason, NodeCallPreCondFailure):
+    elif reason == FailureReason.NodeCallPreCondFailure:
         eprint("failed to satisfy function precondition")
-    elif isinstance(reason, LoopInvariantObligFailure):
+    elif reason == FailureReason.LoopInvariantObligFailure:
         eprint("failed to prove loop invariant")
-    elif isinstance(reason, FnPostCondFailure):
+    elif reason == FailureReason.FnPostCondFailure:
         eprint("failed to prove function post condition")
     else:
-        assert_never(reason)
+        assert False, "Never"
 
 
 def human_var_nip(src: source.ExprVarT[dsa.Incarnation[source.ProgVarName | nip.GuardVarName]]) -> str:
@@ -224,7 +196,7 @@ def extract_and_print_why(func: dsa.Function, reason: FailureReason, node: DSANo
 
     :return: A successive node name which indicates which use caused the node (parameter) to fail
     """
-    if isinstance(reason, UnInitialised):
+    if reason == FailureReason.UnInitialised:
         assert isinstance(node, source.NodeCond)
         succ_node_name = node.succ_then
         variables = list(
@@ -238,16 +210,16 @@ def extract_and_print_why(func: dsa.Function, reason: FailureReason, node: DSANo
             eprint(
                 f"one of {variables} was uninitialised, refer to GraphLang at node {succ_node_name}")
         return succ_node_name
-    elif isinstance(reason, OverflowFailure | UnderflowFailure | OverOrUnderflowFailure):
+    elif reason in [FailureReason.OverflowFailure,  FailureReason.UnderflowFailure, FailureReason.OverOrUnderflowFailure]:
         assert isinstance(node, source.NodeCond)
         failure_str = ""
-        if isinstance(reason, OverflowFailure):
+        if reason == FailureReason.OverflowFailure:
             failure_str = "overflow"
-        elif isinstance(reason, UnderflowFailure):
+        elif reason == FailureReason.UnderflowFailure:
             failure_str = "underflow"
         else:
             failure_str = "underflow or overflow"
-        variables = list(map(human_var, source.used_variables_in_node(node)))
+        variables = [human_var(v) for v in source.used_variables_in_node(node)]
         succ_node_name = node.succ_then
         succ_node = func.nodes[succ_node_name]
         # a guard is always followed:
@@ -265,20 +237,20 @@ def extract_and_print_why(func: dsa.Function, reason: FailureReason, node: DSANo
             eprint(f"one or more of variables", variables,
                    f"leads to an {failure_str} from some interleaving of arithmetic operation(s), refer to GraphLang at node {succ_succ_node_name}")
         return succ_succ_node_name
-    elif isinstance(reason, UnknownFailure):
+    elif reason == FailureReason.UnknownFailure:
         eprint("got an unknown failure, try normalising the C code and running ubc again")
         return None
-    elif isinstance(reason, InvalidMemory):
+    elif reason == FailureReason.InvalidMemory:
         # TODO Depends on what we emit for memory ops
         assert False, "TODO"
-    elif isinstance(reason, UnAlignedMemory):
+    elif reason == FailureReason.UnAlignedMemory:
         assert False, "TODO"
-    elif isinstance(reason, LoopInvariantObligFailure):
+    elif reason == FailureReason.LoopInvariantObligFailure:
         assert isinstance(node, ghost_code.NodeLoopInvariantProofObligation)
         eprint(
             f"The loop invariant proof obligation at node {node_name} was not met")
         return None
-    elif isinstance(reason, NodeCallPreCondFailure):
+    elif reason == FailureReason.NodeCallPreCondFailure:
         assert isinstance(node, ghost_code.NodePrecondObligationFnCall)
         succ_node_name = node.succ
         succ_node = func.nodes[succ_node_name]
@@ -286,14 +258,14 @@ def extract_and_print_why(func: dsa.Function, reason: FailureReason, node: DSANo
         eprint(
             f"call to function {succ_node.fname} did not satisfy it's preconditions")
         return succ_node_name
-    elif isinstance(reason, FnPostCondFailure):
+    elif reason == FailureReason.FnPostCondFailure:
         assert isinstance(node, ghost_code.NodePostConditionProofObligation)
         eprint(
             f"function {func.name}'s post condition was not able to be proven")
         # no such thing as a use here
         return None
     else:
-        assert_never(reason)
+        assert False, "unreachable"
 
 
 def get_sat(smtlib: smt.SMTLIB) -> Tuple[bool, smt.CheckSatResult]:
@@ -325,8 +297,6 @@ def pretty_node(node: source.Node[source.VarNameKind]) -> str:
         assert_never(node)
 
 
-
-
 def send_smtlib_model(smtlib: smt.SMTLIB, solver_type: smt.SolverType) -> smt.Responses:
     """Send command to any smt solver and returns a boolean per (check-sat)
     """
@@ -354,17 +324,13 @@ def send_smtlib_model(smtlib: smt.SMTLIB, solver_type: smt.SolverType) -> smt.Re
 
 
 def get_relevant_responses(node_vars: Set[source.ExprVarT[ap.VarName]], responses: smt.Responses) -> None:
-    lambda_fn: Callable[[smt.Identifier], bool] = lambda x: x != smt.identifier(
-        ap.node_ok_name(source.NodeNameErr))
-    rel_vars = set(filter(
-        lambda_fn,
-        map(lambda x: smt.identifier(x.name), node_vars)
-    )
-    )
+    nodeNameErrOk = smt.identifier(ap.node_ok_name(source.NodeNameErr))
+    rel_vars = set([smt.identifier(x.name)
+                   for x in node_vars if smt.identifier(x.name) != nodeNameErrOk])
+
     for res in responses:
         if isinstance(res, smt.CheckSatResponse):
             continue
-
         for r in res:
             if isinstance(r, smt.CmdForall | smt.CmdComment):
                 continue
@@ -408,6 +374,8 @@ def debug_func_smt(func: dsa.Function, prelude_files: Sequence[str]) -> Tuple[Fa
     visited: set[source.NodeName] = set([])
     while len(q) != 0:
         node_name = q.pop()
+        print('--')
+        print(node_name)
         visited = visited.union(set([node_name]))
         node = func.nodes[node_name]
         not_taken_path_and_node = not_taken_path.union(set([node_name]))
@@ -433,7 +401,8 @@ def debug_func_smt(func: dsa.Function, prelude_files: Sequence[str]) -> Tuple[Fa
             eprint("FAILING ASSERTION", style="red on white", justify="center")
             node_as_ap = node_dsa_to_node_ap(node)
             eprint("ASSERT", pretty_node(node_as_ap))
-            expr = ap.apply_weakest_precondition(prog.nodes_script[ap.node_ok_name(node_name)])
+            expr = ap.apply_weakest_precondition(
+                prog.nodes_script[ap.node_ok_name(node_name)])
             eprint("FAILING ASSERT SMT", style="red on white", justify="center")
             eprint(smt.emit_cmd(smt.CmdAssert(expr)))
             if used_node_name is not None:
@@ -443,7 +412,7 @@ def debug_func_smt(func: dsa.Function, prelude_files: Sequence[str]) -> Tuple[Fa
                 eprint("HINT: SUSPECTED STATEMENT",
                        justify="center", style="red on white")
                 eprint(pretty_node(used_node_as_ap), style="magenta bold")
-            
+
             succ_smtlib_with_model = smt.make_smtlib(
                 prog, prelude_files=prelude_files, assert_ok_nodes=not_taken_path.union(set(successors)), with_model=True)
 
@@ -473,13 +442,16 @@ def debug_func_smt(func: dsa.Function, prelude_files: Sequence[str]) -> Tuple[Fa
                 prog, prelude_files=prelude_files, assert_ok_nodes=not_taken_path_and_succ2)
             succ_node1_consistent, succ_node1_sat = get_sat(succ_node1_smtlib)
             succ_node2_consistent, succ_node2_sat = get_sat(succ_node2_smtlib)
+            print("n1 :", node1, "sat1: ", succ_node1_sat,
+                  "consistent: ", succ_node1_consistent)
+            print("n2 :", node2, "sat2: ", succ_node2_sat,
+                  "consistent: ", succ_node2_consistent)
             if succ_node1_sat == smt.CheckSatResult.UNSAT and succ_node2_sat == smt.CheckSatResult.UNSAT:
+                # DO NOT ADD TO NOT TAKEN PATH IN THIS BRANCH
                 if succ_node1_consistent:
                     q = q.union(set([node1]))
-                    not_taken_path.add(node2)
                 elif succ_node2_consistent:
                     q = q.union(set([node2]))
-                    not_taken_path.add(node1)
                 else:
                     assert False, "one path has to be consistent"
                 q = q.union(set([node1]))
@@ -490,9 +462,10 @@ def debug_func_smt(func: dsa.Function, prelude_files: Sequence[str]) -> Tuple[Fa
                 q.add(node2)
                 not_taken_path.add(node1)
             else:
-                # EDGE case take any path but do not add to not_taken_path
+                # DO NOT ADD TO NOT TAKEN PATH IN THIS BRANCH AS WELL
                 q = q.union(set([node1]))
 
         else:
             q = q.union(set(successors))
+
     assert False, "This was reached because we failed to diagnose an error - either this function succeeds or some edge case is missing for error handling"

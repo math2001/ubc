@@ -210,7 +210,7 @@ def apply_insertions(func: ghost_code.Function, s: DSABuilder) -> None:
 
             assert len(updates) > 0, f"{node_insertions=}"
             join_node = NodeJoiner(
-                provenance.ProvenanceDSAJoiner(), tuple(updates), node_name)
+                provenance.Provenance.DSA_JOINER, tuple(updates), node_name)
             s.dsa_nodes[join_node_name] = join_node
             assert join_node_name not in s.incarnations
 
@@ -463,12 +463,14 @@ def dsa(func: ghost_code.Function) -> Function:
     assert loops.keys() == func.loops.keys()
 
     # Tracking all generated variables so we can emit them in SMT
-    dsa_variables: Set[source.ExprVarT[Incarnation[nip.GuardVarName | source.ProgVarName]]] = set([])
+    dsa_variables: Set[source.ExprVarT[Incarnation[nip.GuardVarName | source.ProgVarName]]] = set([
+    ])
 
-    # If all dsa variables were based from a valid BaseVarName => 
+    # If all dsa variables were based from a valid BaseVarName =>
     # all dsa variables are valid, so we can fill in the Function.variables using the incarnations
     for _, dsa_base_inc_pairs in s.incarnations.items():
-        dsa_vars = set([make_dsa_var(func.variables, prg_name, inc) for prg_name, inc in dsa_base_inc_pairs.items()])
+        dsa_vars = set([make_dsa_var(func.variables, prg_name, inc)
+                       for prg_name, inc in dsa_base_inc_pairs.items()])
         dsa_variables = dsa_variables | dsa_vars
 
     return Function(

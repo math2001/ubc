@@ -434,25 +434,25 @@ def parse_cmd_define_fun() -> pc.Parser[smt.CmdDefineFun]:
         return (smt.CmdDefineFun(symbol=ident, args=args, ret_sort=ret_sort, term=expr), s)
     return fn
 
+
 def parse_cmd_comment() -> pc.Parser[smt.CmdComment]:
     def fn(s: str) -> pc.ParseResult[smt.CmdComment]:
         startStr = ";;"
         maybeStart = ws(pc.string(startStr))(s)
         if isinstance(maybeStart, pc.ParseError):
             return maybeStart
-        
+
         _, s = maybeStart
 
         comment_idx: tp.Optional[int] = None
         for i in range(0, len(s)):
             if s[i] == '\n':
-                comment_idx = i 
+                comment_idx = i
                 break
 
-        
-        # no new line case -> entire string 
+        # no new line case -> entire string
         # must be a comment
-        if comment_idx == None: 
+        if comment_idx == None:
             comment_idx = len(s)
 
         comment = s[:comment_idx]

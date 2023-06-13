@@ -1,4 +1,4 @@
-from typing import Mapping, NamedTuple, NewType, Sequence, TypeAlias, cast, overload
+from typing import Mapping, NamedTuple, NewType, Sequence, Set, TypeAlias, cast, overload
 from typing_extensions import assert_never
 import dsa
 import nip
@@ -31,6 +31,8 @@ class AssumeProveProg(NamedTuple):
     entry: NodeOkName
 
     arguments: Sequence[APVar]
+
+    variables: Set[source.ExprVarT[VarName]]
     # TODO: specify each assert with a specific error message
 
 
@@ -244,7 +246,8 @@ def make_prog(func: dsa.Function) -> AssumeProveProg:
         assert all(ins.expr.typ == source.type_bool for ins in script)
 
     args = tuple(convert_expr_var(arg) for arg in func.signature.parameters)
-    return AssumeProveProg(nodes_script=nodes_script, entry=node_ok_name(func.cfg.entry), arguments=args)
+    ap_variables = set([convert_expr_var(v) for v in func.variables])
+    return AssumeProveProg(nodes_script=nodes_script, entry=node_ok_name(func.cfg.entry), arguments=args, variables=ap_variables)
 
 
 def pretty_instruction_ascii(ins: Instruction) -> str:

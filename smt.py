@@ -466,12 +466,17 @@ def make_smtlib(p: assume_prove.AssumeProveProg, prelude_files: Sequence[str] = 
 
     cmds.append(EmptyLine)
 
+    # ignore node_ok like variables 
+    # only use variables that can be traced back to the C code & spec. 
+    expr_variables = set([])
+
     # emit all arguments
     for arg in p.arguments:
         cmds.append(CmdDeclareFun(identifier(arg.name), (), arg.typ))
         emited_identifiers.add(identifier(arg.name))
         emited_variables.add(arg.name)
-
+        expr_variables.add(arg.name)
+    
     # emit all variable declaration (declare-fun y () <sort>)
     for script in p.nodes_script.values():
         for ins in script:
@@ -481,6 +486,13 @@ def make_smtlib(p: assume_prove.AssumeProveProg, prelude_files: Sequence[str] = 
                     cmds.append(CmdDeclareFun(iden, (), var.typ))
                     emited_identifiers.add(iden)
                     emited_variables.add(var.name)
+                    expr_variables.add(var.name)
+
+    setvars = set([v.name for v in p.variables])
+    if expr_variables != setvars:
+        print("DIFF: ", expr_variables - setvars)
+
+    assert expr_variables == setvars
 
     cmds.append(EmptyLine)
 

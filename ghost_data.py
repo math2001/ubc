@@ -54,7 +54,17 @@ def i64v(name: str) -> source.ExprVarT[source.ProgVarName]:
     return source.ExprVar(source.type_word64, source.ProgVarName(name + "___long#v"))
 
 
+def u64v(name: str) -> source.ExprVarT[source.ProgVarName]:
+    # return source.ExprVar(source.type_word64, source.HumanVarName(source.HumanVarNameSubject(name), use_guard=False, path=()))
+    return source.ExprVar(source.type_word64, source.ProgVarName(name + "___unsigned_long#v"))
+
+
 def i64(n: int) -> source.ExprNumT:
+    assert -0x8000_0000_0000_0000 <= n and n <= 0x7fff_ffff_ffff_ffff
+    return source.ExprNum(source.type_word64, n)
+
+
+def u64(n: int) -> source.ExprNumT:
     assert -0x8000_0000_0000_0000 <= n and n <= 0x7fff_ffff_ffff_ffff
     return source.ExprNum(source.type_word64, n)
 
@@ -127,7 +137,7 @@ def htd_assigned() -> source.ExprVarT[nip.GuardVarName]:
 
 
 def mem_assigned() -> source.ExprVarT[nip.GuardVarName]:
-    return g(source.ExprVar(source.type_bool, source.ProgVarName('MEM')))
+    return g(source.ExprVar(source.type_bool, source.ProgVarName('Mem')))
 
 
 def pms_assigned() -> source.ExprVarT[nip.GuardVarName]:
@@ -301,30 +311,32 @@ universe: Mapping[str, Mapping[str, source.Ghost[source.ProgVarName | nip.GuardV
         "libsel4cp.handler_loop": source.Ghost(loop_invariants={
             lh('3'): conjs(
                 source.expr_implies(
-                    neq(charv('have_reply'), char(0)),
-                    eq(g('reply_tag'), T),
+                    neq(charv('have_reply____Bool#v'), char(0)),
+                    eq(g('reply_tag___struct_seL4_MessageInfo_C#v.words_C.0'), T),
                 ),
                 source.expr_implies(
-                    eq(g('is_endpoint'), T),
+                    eq(g('is_endpoint___unsigned_long#v'), T),
                     eq(
-                        neq(i64v('is_endpoint'), i64(0)),
-                        neq(charv('have_reply'), char(0))
+                        neq(u64v('is_endpoint'), u64(0)),
+                        neq(charv('have_reply____Bool#v'), char(1)) # CHANGE TO 0
                     )
                 ),
                 eq(htd_assigned(), T),
                 eq(mem_assigned(), T),
                 eq(pms_assigned(), T),
                 eq(ghost_asserts_assigned(), T),
-                eq(g('have_reply'), T),
+                eq(g('have_reply____Bool#v'), T),
+                eq(g("test#ghost"), T)
             ),
             lh('10'): conjs(
-                eq(i64v('is_endpoint'), i64(0)),
-                eq(g('badge'), T),
-                eq(g('idx'), T),
+                eq(u64v('is_endpoint'), u64(0)),
+                eq(g('lbadge___unsigned_long#v'), T),
+                eq(g('idx___unsigned#v'), T),
                 eq(htd_assigned(), T),
                 eq(mem_assigned(), T),
                 eq(pms_assigned(), T),
-                eq(ghost_asserts_assigned(), T)
+                eq(ghost_asserts_assigned(), T),
+                eq(g("test#ghost"), T)
             )
         }, precondition=T, postcondition=T)
     }

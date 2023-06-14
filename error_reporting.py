@@ -269,6 +269,10 @@ def extract_and_print_why(func: dsa.Function, reason: FailureReason, node: DSANo
 
 
 def get_sat(smtlib: smt.SMTLIB) -> Tuple[bool, smt.CheckSatResult]:
+    """Returns a tuple, one determining if the logic used is consistent, 
+    another indicating if the statements resulted in a program being unsat (verified) or sat. 
+    This structure is given by how smt.make_smtlib is defined.
+    """
     results = tuple(smt.send_smtlib(smtlib, smt.SolverZ3()))
     sz = len(results)
     assert sz >= 2
@@ -366,15 +370,64 @@ def node_dsa_to_node_ap(node: DSANode) -> source.Node[ap.VarName]:
     else:
         assert_never(node)
 
+def diagnose_error(func: dsa.Function, node_name: source.NodeName, prog: ap.AssumeProveProg, not_taken_path: Set[source.NodeName], successors: Sequence[source.NodeName], prelude_files: Sequence[str]) -> Tuple[FailureReason, source.NodeName, Optional[source.NodeName]]:
+    node = func.nodes[node_name]
+    eprint("ERROR REPORTING", style="red on white", justify="center")
+            # This is our error node
+    reason = determine_reason(node)
+    print_reason(reason)
+
+    # used_node_name is optional because could not determine the reason
+    used_node_name = extract_and_print_why(
+        func, reason, node, node_name)
+    eprint("FAILING ASSERTION", style="red on white", justify="center")
+    node_as_ap = node_dsa_to_node_ap(node)
+    eprint("ASSERT", pretty_node(node_as_ap))
+    expr = ap.apply_weakest_precondition(
+        prog.nodes_script[ap.node_ok_name(node_name)])
+    eprint("FAILING ASSERT SMT", style="red on white", justify="center")
+    eprint(smt.emit_cmd(smt.CmdAssert(expr)))
+    if used_node_name is not None:
+        used_node = func.nodes[used_node_name]
+        used_node_as_ap = node_dsa_to_node_ap(used_node)
+
+        eprint("HINT: SUSPECTED STATEMENT",
+               justify="center", style="red on white")
+        eprint(pretty_node(used_node_as_ap), style="magenta bold")
+
+    succ_smtlib_with_model = smt.make_smtlib(
+        prog, prelude_files=prelude_files, assert_ok_nodes=not_taken_path.union(set(successors)), with_model=True)
+
+    succ_model = send_smtlib_model(
+        succ_smtlib_with_model, smt.SolverZ3())
+
+    node_vars = set(
+        map(ap.convert_expr_var, source.used_variables_in_node(node)))
+
+    # need to get AP name
+    eprint("VARIABLES USED IN ASSERTION",
+           justify="center", style="red on white")
+    get_relevant_responses(node_vars, succ_model)
+
+    return (reason, node_name, used_node_name)
+
+
 
 def debug_func_smt(func: dsa.Function, prelude_files: Sequence[str]) -> Tuple[FailureReason, source.NodeName, Optional[source.NodeName]]:
+    """Traverses the function/graph and asks the questions (in the context of a node): 
+    (q1) "If my successors are okay, does the program verify?"
+    (q2) "If I am okay, does the program verify?"
+    If the program doesn't verify with the assumption in q1, the error point is above 
+    the successors. 
+    Given the question asked in q1 => 
+        If the program does verify with the assumption in q2, the error point must be the current node. 
+    """
     prog = ap.make_prog(func)
     q: set[source.NodeName] = set([func.cfg.entry])
     not_taken_path: set[source.NodeName] = set([])
     visited: set[source.NodeName] = set([])
     while len(q) != 0:
         node_name = q.pop()
-        print('--')
         print(node_name)
         visited = visited.union(set([node_name]))
         node = func.nodes[node_name]
@@ -384,50 +437,38 @@ def debug_func_smt(func: dsa.Function, prelude_files: Sequence[str]) -> Tuple[Fa
         consistent, node_sat = get_sat(node_smtlib)
         assert consistent
         # we do not care about the Err and Ret node
+        # what are we erasing here?
+        # Err
+        # Ret
+        # Successors for loop invariant obligations since they contain an edge to the error node and back to the loop header.
+        # This means that we really need to handle the loop latches as an edge case.
+        # NOTE: We do not **need** to erase Ret.
         successors = list(
             filter(lambda x: x != source.NodeNameErr and x != source.NodeNameRet and ((node_name, x) not in func.cfg.back_edges), func.cfg.all_succs[node_name]))
         successors_smtlib = smt.make_smtlib(
             prog, prelude_files=prelude_files, assert_ok_nodes=not_taken_path.union(set(successors)))
         _, successors_sat = get_sat(successors_smtlib)
-        if successors_sat == smt.CheckSatResult.SAT and node_sat == smt.CheckSatResult.UNSAT:
-            eprint("ERROR REPORTING", style="red on white", justify="center")
-            # This is our error node
-            reason = determine_reason(node)
-            print_reason(reason)
 
-            # used_node_name is optional because could not determine the reason
-            used_node_name = extract_and_print_why(
-                func, reason, node, node_name)
-            eprint("FAILING ASSERTION", style="red on white", justify="center")
-            node_as_ap = node_dsa_to_node_ap(node)
-            eprint("ASSERT", pretty_node(node_as_ap))
-            expr = ap.apply_weakest_precondition(
-                prog.nodes_script[ap.node_ok_name(node_name)])
-            eprint("FAILING ASSERT SMT", style="red on white", justify="center")
-            eprint(smt.emit_cmd(smt.CmdAssert(expr)))
-            if used_node_name is not None:
-                used_node = func.nodes[used_node_name]
-                used_node_as_ap = node_dsa_to_node_ap(used_node)
-
-                eprint("HINT: SUSPECTED STATEMENT",
-                       justify="center", style="red on white")
-                eprint(pretty_node(used_node_as_ap), style="magenta bold")
-
-            succ_smtlib_with_model = smt.make_smtlib(
-                prog, prelude_files=prelude_files, assert_ok_nodes=not_taken_path.union(set(successors)), with_model=True)
-
-            succ_model = send_smtlib_model(
-                succ_smtlib_with_model, smt.SolverZ3())
-
-            node_vars = set(
-                map(ap.convert_expr_var, source.used_variables_in_node(node)))
-
-            # need to get AP name
-            eprint("VARIABLES USED IN ASSERTION",
-                   justify="center", style="red on white")
-            get_relevant_responses(node_vars, succ_model)
-
-            return (reason, node_name, used_node_name)
+        if (successors_sat == smt.CheckSatResult.SAT and node_sat == smt.CheckSatResult.UNSAT) or (len(successors) == 0):
+            # sanity check for loop latch
+            if len(successors) == 0:
+                assert func.is_loop_latch(node_name), "successors were trimmed but not a loop latch - this is not expected"
+                # Not needed really but let's just check if successors_sat is UNSAT when we introduce the backedge. 
+                # Why are we checking for UNSAT here instead of SAT ? 
+                # Well this is entirely because it is a backedge. 
+                # This is best argued via cutting the graph into sections when loop occur
+                # and reasoning about that instead. 
+                # Let's state that we are in cut graph x, 
+                # we now know that the error must exist in our subgraph **only**
+                # or in the case where the errors aren't just in our graph, we have assumed 
+                # that the other subgraphs are correct by the usage of the not_taken_path. 
+                my_succs = list(filter(lambda x: x != source.NodeNameErr and x != source.NodeNameRet, func.cfg.all_succs[node_name]))
+                my_succ_smtlib = smt.make_smtlib(prog, prelude_files=prelude_files, assert_ok_nodes=not_taken_path.union(set(my_succs)))
+                my_succ_const, my_succ_sat = get_sat(my_succ_smtlib)
+                assert my_succ_const, "Expected to be consistent"
+                assert my_succ_sat == smt.CheckSatResult.UNSAT, "Expected to pass"
+                assert False, "here"
+            return diagnose_error(func, node_name, prog, not_taken_path, successors, prelude_files)
 
         # When len(successors) == 1 and it is a NodeCond, it is because the succ_else path to NodeNameErr was trimmed
         # This is handled above, so we skip it.
@@ -462,8 +503,8 @@ def debug_func_smt(func: dsa.Function, prelude_files: Sequence[str]) -> Tuple[Fa
                 q.add(node2)
                 not_taken_path.add(node1)
             else:
-                # DO NOT ADD TO NOT TAKEN PATH IN THIS BRANCH AS WELL
                 q = q.union(set([node1]))
+                # TODO: add to not taken path here as well?
 
         else:
             q = q.union(set(successors))

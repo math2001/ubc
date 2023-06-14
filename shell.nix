@@ -8,6 +8,7 @@ let
     ps.mypy
     ps.autopep8
     ps.rich
+    ps.pytest-xdist
   ]);
 in pkgs.mkShell {
   packages = [

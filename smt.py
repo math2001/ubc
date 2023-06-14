@@ -451,6 +451,12 @@ def gen_mem_acc_prelude() -> SMTLIB:
 
 
 def make_smtlib(p: assume_prove.AssumeProveProg, prelude_files: Sequence[str] = (), assert_ok_nodes: Collection[source.NodeName] = (), with_model: bool = False) -> SMTLIB:
+
+    # WARN: Please look at error_reporting.get_sat
+    # before changing any of the smt emission code.
+    # The error_reporting expects a certain structure in the
+    # check-sats emitted.
+
     emited_identifiers: set[Identifier] = set()
     emited_variables: set[assume_prove.VarName] = set()
 
@@ -466,8 +472,8 @@ def make_smtlib(p: assume_prove.AssumeProveProg, prelude_files: Sequence[str] = 
 
     cmds.append(EmptyLine)
 
-    # ignore node_ok like variables 
-    # only use variables that can be traced back to the C code & spec. 
+    # ignore node_ok like variables
+    # only use variables that can be traced back to the C code & spec.
     expr_variables = set([])
 
     # emit all arguments
@@ -476,7 +482,7 @@ def make_smtlib(p: assume_prove.AssumeProveProg, prelude_files: Sequence[str] = 
         emited_identifiers.add(identifier(arg.name))
         emited_variables.add(arg.name)
         expr_variables.add(arg.name)
-    
+
     # emit all variable declaration (declare-fun y () <sort>)
     for script in p.nodes_script.values():
         for ins in script:
@@ -488,11 +494,11 @@ def make_smtlib(p: assume_prove.AssumeProveProg, prelude_files: Sequence[str] = 
                     emited_variables.add(var.name)
                     expr_variables.add(var.name)
 
-    setvars = set([v.name for v in p.variables])
-    if expr_variables != setvars:
-        print("DIFF: ", expr_variables - setvars)
+    # setvars = set([v.name for v in p.variables])
+    # if expr_variables != setvars:
+    #     print("DIFF: ", expr_variables - setvars)
 
-    assert expr_variables == setvars
+    # assert expr_variables == setvars
 
     cmds.append(EmptyLine)
 

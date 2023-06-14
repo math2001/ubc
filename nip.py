@@ -290,8 +290,6 @@ def nip(func: source.Function) -> Function:
     loops = abc_cfg.compute_loops(
         new_nodes, cfg)
 
-    print(set(loops.keys()) - set(func.loops.keys()))
-
     assert loops.keys() == func.loops.keys(
     ), "more work required: loop headers changed during conversion, need to keep ghost's loop invariant in sync"
 

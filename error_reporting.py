@@ -1,7 +1,7 @@
 import sys
 import dsa
 import assume_prove as ap
-from typing import Callable, Optional, Set, Tuple, Sequence
+from typing import Optional, Set, Tuple, Sequence
 from typing_extensions import assert_never
 import source
 import smt
@@ -370,10 +370,11 @@ def node_dsa_to_node_ap(node: DSANode) -> source.Node[ap.VarName]:
     else:
         assert_never(node)
 
+
 def diagnose_error(func: dsa.Function, node_name: source.NodeName, prog: ap.AssumeProveProg, not_taken_path: Set[source.NodeName], successors: Sequence[source.NodeName], prelude_files: Sequence[str]) -> Tuple[FailureReason, source.NodeName, Optional[source.NodeName]]:
     node = func.nodes[node_name]
     eprint("ERROR REPORTING", style="red on white", justify="center")
-            # This is our error node
+    # This is our error node
     reason = determine_reason(node)
     print_reason(reason)
 
@@ -412,7 +413,6 @@ def diagnose_error(func: dsa.Function, node_name: source.NodeName, prog: ap.Assu
     return (reason, node_name, used_node_name)
 
 
-
 def debug_func_smt(func: dsa.Function, prelude_files: Sequence[str]) -> Tuple[FailureReason, source.NodeName, Optional[source.NodeName]]:
     """Traverses the function/graph and asks the questions (in the context of a node): 
     (q1) "If my successors are okay, does the program verify?"
@@ -449,29 +449,47 @@ def debug_func_smt(func: dsa.Function, prelude_files: Sequence[str]) -> Tuple[Fa
             prog, prelude_files=prelude_files, assert_ok_nodes=not_taken_path.union(set(successors)))
         _, successors_sat = get_sat(successors_smtlib)
 
+        # len(successors) can be 0, 1 or 2.
+        # 0 means there was a NodeCond with Error and backedge
+        # 1 means NodeCond with Error only or a normal node
+        # 2 NodeCond going to non {Error, Ret, backedge} - This should never happen
+
+        # assert these correction conditions here, then we can assume then in the rest of the codebase.
+        if len(successors) == 0:
+            assert func.is_loop_latch(node_name), "expected a loop latch"
+        elif len(successors) == 1:
+            if isinstance(node, source.NodeCond):
+                assert node.succ_else == source.NodeNameErr, "expected Err when len(successors) == 1 and NodeCond"
+        elif len(successors) == 2:
+            # only nodecond can have 2 succs
+            assert isinstance(node, source.NodeCond)
+        else:
+            assert "invalid number of successors received"
+
         if (successors_sat == smt.CheckSatResult.SAT and node_sat == smt.CheckSatResult.UNSAT) or (len(successors) == 0):
             # sanity check for loop latch
             if len(successors) == 0:
-                assert func.is_loop_latch(node_name), "successors were trimmed but not a loop latch - this is not expected"
-                # Not needed really but let's just check if successors_sat is UNSAT when we introduce the backedge. 
-                # Why are we checking for UNSAT here instead of SAT ? 
-                # Well this is entirely because it is a backedge. 
+                assert func.is_loop_latch(
+                    node_name), "successors were trimmed but not a loop latch - this is not expected"
+                # Not needed really but let's just check if successors_sat is UNSAT when we introduce the backedge.
+                # Why are we checking for UNSAT here instead of SAT ?
+                # Well this is entirely because it is a backedge.
                 # This is best argued via cutting the graph into sections when loop occur
-                # and reasoning about that instead. 
-                # Let's state that we are in cut graph x, 
+                # and reasoning about that instead.
+                # Let's state that we are in cut graph x,
                 # we now know that the error must exist in our subgraph **only**
-                # or in the case where the errors aren't just in our graph, we have assumed 
-                # that the other subgraphs are correct by the usage of the not_taken_path. 
-                my_succs = list(filter(lambda x: x != source.NodeNameErr and x != source.NodeNameRet, func.cfg.all_succs[node_name]))
-                my_succ_smtlib = smt.make_smtlib(prog, prelude_files=prelude_files, assert_ok_nodes=not_taken_path.union(set(my_succs)))
+                # or in the case where the errors aren't just in our graph, we have assumed
+                # that the other subgraphs are correct by the usage of the not_taken_path.
+                my_succs = list(filter(lambda x: x != source.NodeNameErr and x !=
+                                source.NodeNameRet, func.cfg.all_succs[node_name]))
+                my_succ_smtlib = smt.make_smtlib(
+                    prog, prelude_files=prelude_files, assert_ok_nodes=not_taken_path.union(set(my_succs)))
                 my_succ_const, my_succ_sat = get_sat(my_succ_smtlib)
                 assert my_succ_const, "Expected to be consistent"
                 assert my_succ_sat == smt.CheckSatResult.UNSAT, "Expected to pass"
-                assert False, "here"
+
             return diagnose_error(func, node_name, prog, not_taken_path, successors, prelude_files)
 
-        # When len(successors) == 1 and it is a NodeCond, it is because the succ_else path to NodeNameErr was trimmed
-        # This is handled above, so we skip it.
         if isinstance(node, source.NodeCond) and len(successors) != 1:
             node1 = successors[0]
             node2 = successors[1]
@@ -483,12 +501,8 @@ def debug_func_smt(func: dsa.Function, prelude_files: Sequence[str]) -> Tuple[Fa
                 prog, prelude_files=prelude_files, assert_ok_nodes=not_taken_path_and_succ2)
             succ_node1_consistent, succ_node1_sat = get_sat(succ_node1_smtlib)
             succ_node2_consistent, succ_node2_sat = get_sat(succ_node2_smtlib)
-            print("n1 :", node1, "sat1: ", succ_node1_sat,
-                  "consistent: ", succ_node1_consistent)
-            print("n2 :", node2, "sat2: ", succ_node2_sat,
-                  "consistent: ", succ_node2_consistent)
             if succ_node1_sat == smt.CheckSatResult.UNSAT and succ_node2_sat == smt.CheckSatResult.UNSAT:
-                # DO NOT ADD TO NOT TAKEN PATH IN THIS BRANCH
+                # DO NOT ADD TO NOT TAKEN PATH
                 if succ_node1_consistent:
                     q = q.union(set([node1]))
                 elif succ_node2_consistent:
@@ -504,7 +518,6 @@ def debug_func_smt(func: dsa.Function, prelude_files: Sequence[str]) -> Tuple[Fa
                 not_taken_path.add(node1)
             else:
                 q = q.union(set([node1]))
-                # TODO: add to not taken path here as well?
 
         else:
             q = q.union(set(successors))

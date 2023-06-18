@@ -318,7 +318,8 @@ universe: Mapping[str, Mapping[str, source.Ghost[source.ProgVarName | nip.GuardV
                     eq(g('is_endpoint___unsigned_long#v'), T),
                     eq(
                         neq(u64v('is_endpoint'), u64(0)),
-                        neq(charv('have_reply____Bool#v'), char(1)) # CHANGE TO 0
+                        neq(charv('have_reply____Bool#v'),
+                            char(1))  # CHANGE TO 0
                     )
                 ),
                 eq(htd_assigned(), T),

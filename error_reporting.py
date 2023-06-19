@@ -521,31 +521,44 @@ def debug_func_smt(func: dsa.Function, prelude_files: Sequence[str]) -> Tuple[Fa
                 prog, prelude_files=prelude_files, assert_ok_nodes=not_taken_path_and_succ2)
             succ_node1_consistent, succ_node1_sat = get_sat(succ_node1_smtlib)
             succ_node2_consistent, succ_node2_sat = get_sat(succ_node2_smtlib)
+            print(node1, "=", succ_node1_sat)
+            print(node2, "=", succ_node2_sat)
             # for some reason, the C parser will emit nonsense such as (assert True) => cond(when False) => assume True => Err.
             # The consistentcy is used as an "reachability analysis" of sorts.
             # This works because False `implies` True will give us False, returning an UNSAT (NOTE: this is before the UNSAT for the condition of program verification).
 
             # let's assert that this consistency edge cased is only encountered for the above pattern.
-
+            # TODO: assert this
+            
+            # BOTH PATHS GAVE UNSAT, this can happen when both paths rely on the same failing assertion see error.txt (tmp.after_loop_conditionals)
+            # or one path is not consistent. 
             if succ_node1_sat == smt.CheckSatResult.UNSAT and succ_node2_sat == smt.CheckSatResult.UNSAT:
-                # DO NOT ADD TO NOT TAKEN PATH
                 if succ_node1_consistent:
                     q = q.union(set([node1]))
                 elif succ_node2_consistent:
                     q = q.union(set([node2]))
                 else:
                     assert False, "one path has to be consistent"
-                q = q.union(set([node1]))
+            # these are normal 
             elif succ_node1_sat == smt.CheckSatResult.UNSAT and succ_node2_sat == smt.CheckSatResult.SAT:
+                # assuming succ_node1, the program verified 
+                # assuming succ_node2, the program failed to verify 
+                # means that there is an error in succ_node1
                 q.add(node1)
                 not_taken_path.add(node2)
             elif succ_node2_sat == smt.CheckSatResult.UNSAT and succ_node1_sat == smt.CheckSatResult.SAT:
                 q.add(node2)
                 not_taken_path.add(node1)
             else:
+                assert False, "hit marker"
+                # both path's returned SAT
+                # we can technically add node2 to the not_taken_path here 
+                # but better to be safe and not do that.
+                # NOTE: we just took node1, can also do the inverse. 
                 q = q.union(set([node1]))
 
         else:
+            # keep exploring
             q = q.union(set(successors))
 
     assert False, "This was reached because we failed to diagnose an error - either this function succeeds or some edge case is missing for error handling"

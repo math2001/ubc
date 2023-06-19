@@ -158,3 +158,22 @@ int two_backedges(int x) {
   }
   return x + 12;
 }
+
+int error_both_paths(int x, int y) {
+  if(x) {
+    return y + 10;
+  }else {
+    return y + 3;
+  }
+  return 0;
+}
+
+int error_both_paths1(int x, int y) {
+  int r = 0; 
+  if(x) {
+    r = y + 10;
+  }else {
+    r = y + 15;
+  }
+  return y;
+}

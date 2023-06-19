@@ -116,6 +116,19 @@ Function tmp.private_hello 6 hx___int#v Word 32 hc___char#v Word 8 Mem Mem HTD H
 7 Cond 6 Err Op And Bool 2 Op And Bool 2 Op SignedLessEquals Bool 2 Num 0 Word 32 Var hx___int#v Word 32 Op SignedLessEquals Bool 2 Num 0 Word 32 Var hx___int#v Word 32 Op SignedLess Bool 2 Var hx___int#v Word 32 Num 32 Word 32
 EntryPoint 7
 
+Function tmp.two_backedges 5 x___int#v Word 32 Mem Mem HTD HTD PMS PMS GhostAssertions WordArray 50 64 5 ret__int#v Word 32 Mem Mem HTD HTD PMS PMS GhostAssertions WordArray 50 64
+1 Basic Ret 0
+2 Cond 1 Err Op False Bool 0
+3 Basic 1 1 ret__int#v Word 32 Op Plus Word 32 2 Var x___int#v Word 32 Num 12 Word 32
+4 Cond 3 Err Op Equals Bool 2 Op SignedLessEquals Bool 2 Var x___int#v Word 32 Op Plus Word 32 2 Var x___int#v Word 32 Num 12 Word 32 Op SignedLessEquals Bool 2 Num 0 Word 32 Num 12 Word 32
+9 Cond 4 5 Op SignedLessEquals Bool 2 Num 0 Word 32 Var x___int#v Word 32
+10 Cond 5 9 Op Equals Bool 2 Var x___int#v Word 32 Num 4 Word 32
+5 Basic 6 1 loop#5#count Word 64 Op Plus Word 64 2 Var loop#5#count Word 64 Num 1 Word 64
+6 Cond 7 Err Op True Bool 0
+7 Cond 10 4 Op Not Bool 1 Op Equals Bool 2 Num 1 Word 32 Num 0 Word 32
+8 Basic 6 1 loop#5#count Word 64 Num 0 Word 64
+EntryPoint 8
+
 Function tmp.one_unreachable 6 x___int#v Word 32 y___int#v Word 32 Mem Mem HTD HTD PMS PMS GhostAssertions WordArray 50 64 5 ret__int#v Word 32 Mem Mem HTD HTD PMS PMS GhostAssertions WordArray 50 64
 1 Basic Ret 0
 2 Cond 1 Err Op False Bool 0
@@ -126,6 +139,11 @@ Function tmp.one_unreachable 6 x___int#v Word 32 y___int#v Word 32 Mem Mem HTD H
 7 Cond 6 4 Op Equals Bool 2 Var x___int#v Word 32 Num 1 Word 32
 8 Cond 7 4 Op Equals Bool 2 Var x___int#v Word 32 Num 0 Word 32
 EntryPoint 8
+
+Function tmp.call_hello_uninit 5 hx___int#v Word 32 Mem Mem HTD HTD PMS PMS GhostAssertions WordArray 50 64 4 Mem Mem HTD HTD PMS PMS GhostAssertions WordArray 50 64
+1 Basic Ret 0
+2 Call 1 tmp.private_hello 6 Num 0 Word 32 Op WordCastSigned Word 8 1 Var bc___int#v Word 32 Var Mem Mem Var HTD HTD Var PMS PMS Var GhostAssertions WordArray 50 64 5 rv#space#ret__int#v Word 32 Mem Mem HTD HTD PMS PMS GhostAssertions WordArray 50 64
+EntryPoint 2
 
 Function tmp.call_hello_failure 5 cchf___char#v Word 8 Mem Mem HTD HTD PMS PMS GhostAssertions WordArray 50 64 4 Mem Mem HTD HTD PMS PMS GhostAssertions WordArray 50 64
 1 Basic Ret 0

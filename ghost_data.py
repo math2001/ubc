@@ -153,6 +153,13 @@ def arg(v: source.ExprVarT[source.ProgVarName]) -> source.ExprVarT[source.ProgVa
 
 
 universe: Mapping[str, Mapping[str, source.Ghost[source.ProgVarName | nip.GuardVarName]]] = {
+    "tests/errors/errors.txt": {
+        "tmp.private_hello": source.Ghost(
+            precondition=eq(arg(i32v('hx')), i32(0)),
+            postcondition=T,
+            loop_invariants={}
+        )
+    },
     "tests/all.txt": {
         # 3 <= i ==> a = 1
         # 3:w32 <=s i:w32 ==> a:w32 = 1:w32

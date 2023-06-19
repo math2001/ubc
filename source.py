@@ -740,7 +740,7 @@ class Update(Generic[VarNameKind]):
 
 
 @dataclass(frozen=True)
-class NodeEmpty:
+class NodeEmpty(ABCNode[VarNameKind]):
     succ: NodeName
 
 
@@ -1033,7 +1033,8 @@ def convert_function_nodes(nodes: Mapping[str | int, syntax.Node]) -> Mapping[No
         name = NodeName(str(name))
         if node.kind == "Basic":
             if len(node.upds) == 0:
-                safe_nodes[name] = NodeEmpty(succ=NodeName(str(node.cont)))
+                safe_nodes[name] = NodeEmpty(succ=NodeName(
+                    str(node.cont)), origin=Provenance.NODE_EMPTY)
             else:
                 upds: list[Update[ProgVarName]] = []
                 for var, expr in node.upds:

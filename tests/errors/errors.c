@@ -47,6 +47,12 @@ void call_hello(int hx, char bc) {
   return;
 }
 
+void call_hello_uninit(int hx) {
+  int bc; 
+  private_hello(0, bc);
+  return;
+}
+
 int add1(int x) {
   return x;
 }
@@ -138,4 +144,17 @@ int after_conds(int x, int y) {
     y = 1;
   }
   return x + 1;
+}
+
+
+int two_backedges(int x) {
+  while(1) {
+    if(x == 4) {
+    }else {
+      if(x >= 0){
+        break;
+      }
+    }
+  }
+  return x + 12;
 }

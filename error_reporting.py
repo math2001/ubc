@@ -169,21 +169,9 @@ def print_reason(reason: FailureReason) -> None:
         assert False, "Never"
 
 
-def human_var_nip(src: source.ExprVarT[dsa.Incarnation[source.ProgVarName | nip.GuardVarName]]) -> str:
+def varname(src: source.ExprVarT[dsa.Incarnation[source.ProgVarName | nip.GuardVarName]]) -> str:
     varname = str(src.name.base)
-    splitvarname = varname.split('#v#assigned')
-    assert len(
-        splitvarname) == 2, "This is not supposed to happen, there is a bug in the error reporting python code"
-    human_varname = splitvarname[0].split('___')
-    assert len(human_varname) == 2, "This is not supposed to happen"
-    return human_varname[0]
-
-
-def human_var(src: source.ExprVarT[dsa.Incarnation[source.ProgVarName | nip.GuardVarName]]) -> str:
-    varname = str(src.name.base)
-    human_varname = varname.split('___')
-    assert len(human_varname) == 2, "This is not supposed to happen"
-    return human_varname[0]
+    return varname
 
 
 def extract_and_print_why(func: dsa.Function, reason: FailureReason, node: DSANode, node_name: source.NodeName) -> Optional[source.NodeName]:
@@ -199,17 +187,35 @@ def extract_and_print_why(func: dsa.Function, reason: FailureReason, node: DSANo
     if reason == FailureReason.UnInitialised:
         assert isinstance(node, source.NodeCond)
         succ_node_name = node.succ_then
+        succ_node = func.nodes[succ_node_name]  # maybe stash node
+
+        usage_node = succ_node_name
+
+        # edge case when call node, usage is after skipping two nodes
+        if succ_node.origin == Provenance.CALL_STASH:
+            succ_succ_node_name = succ_node.succ_then if isinstance(
+                succ_node, source.NodeCond) else succ_node.succ
+            succ_succ_node = func.nodes[succ_succ_node_name]  # pre node
+
+            succ_succ_succ_node_name = succ_succ_node.succ_then if isinstance(
+                succ_succ_node, source.NodeCond) else succ_succ_node.succ
+            succ_succ_succ_node = func.nodes[succ_succ_succ_node_name]
+            assert isinstance(
+                succ_succ_succ_node, source.NodeCall), "expected a call node following CALL_STASH"
+            usage_node = succ_succ_succ_node_name
+
         variables = list(
-            map(human_var_nip, source.used_variables_in_node(node)))
+            map(varname, source.used_variables_in_node(node)))
         assert len(
             variables) > 0, "Makes no sense for no variables to be uninitialised and still have the reason as uninitialised"
         if len(variables) == 1:
             eprint(
-                f"{variables[0]} was uninitialised when used, refer to GraphLang at node {succ_node_name}")
+                f"{variables[0]} was false when used, refer to GraphLang at node {usage_node}")
         else:
             eprint(
-                f"one of {variables} was uninitialised, refer to GraphLang at node {succ_node_name}")
-        return succ_node_name
+                f"one of {variables} was false when used, refer to GraphLang at node {usage_node}")
+        return usage_node
+
     elif reason in [FailureReason.OverflowFailure,  FailureReason.UnderflowFailure, FailureReason.OverOrUnderflowFailure]:
         assert isinstance(node, source.NodeCond)
         failure_str = ""
@@ -219,7 +225,7 @@ def extract_and_print_why(func: dsa.Function, reason: FailureReason, node: DSANo
             failure_str = "underflow"
         else:
             failure_str = "underflow or overflow"
-        variables = [human_var(v) for v in source.used_variables_in_node(node)]
+        variables = [varname(v) for v in source.used_variables_in_node(node)]
         succ_node_name = node.succ_then
         succ_node = func.nodes[succ_node_name]
         # a guard is always followed:
@@ -345,7 +351,7 @@ def get_relevant_responses(node_vars: Set[source.ExprVarT[ap.VarName]], response
 
 def node_dsa_to_node_ap(node: DSANode) -> source.Node[ap.VarName]:
     if isinstance(node, source.NodeEmpty):
-        return source.NodeEmpty(succ=node.succ)
+        return source.NodeEmpty(succ=node.succ, origin=Provenance.NODE_EMPTY)
     elif isinstance(node, source.NodeBasic):
         def convert_update(upd: source.Update[dsa.Incarnation[source.ProgVarName | nip.GuardVarName]]) -> source.Update[ap.VarName]:
             new_var = ap.convert_expr_dsa_vars_to_ap(upd.var)
@@ -454,20 +460,33 @@ def debug_func_smt(func: dsa.Function, prelude_files: Sequence[str]) -> Tuple[Fa
         # 1 means NodeCond with Error only or a normal node
         # 2 NodeCond going to non {Error, Ret, backedge} - This should never happen
 
-        # assert these correction conditions here, then we can assume then in the rest of the codebase.
+        # assert these correctness conditions here, then we can assume then in the rest of the codebase.
         if len(successors) == 0:
-            assert func.is_loop_latch(node_name), "expected a loop latch"
+            assert func.is_loop_latch(
+                node_name), "expected a loop latch since all backedges and Err nodes are trimmed"
+            assert isinstance(
+                node, source.NodeCond), "when len(successors) == 0, expected a loop latch"
+            assert node.succ_else == source.NodeNameErr, "expected the else statement to lead to an Err node"
         elif len(successors) == 1:
             if isinstance(node, source.NodeCond):
                 assert node.succ_else == source.NodeNameErr, "expected Err when len(successors) == 1 and NodeCond"
         elif len(successors) == 2:
             # only nodecond can have 2 succs
             assert isinstance(node, source.NodeCond)
+            # no possible way for this to be a loop latch since these nodes are trimmed
+            assert not func.is_loop_latch(
+                node_name), "loop latch with two successors are not handled - no need to worry, should be a simple fix"
+
         else:
             assert "invalid number of successors received"
 
+        # We have detected an error if the assuming the successor to be true results in the program failing to verify
+        # yet assuming the current node to be true, results in the program verifying.
+        # There is also the edge case where len(successors) == 0, when an assertion is on a loop latch.
+        # This ALWAYS means the loop latch is the problem.
         if (successors_sat == smt.CheckSatResult.SAT and node_sat == smt.CheckSatResult.UNSAT) or (len(successors) == 0):
-            # sanity check for loop latch
+            # sanity check for loop latch, this is not needed
+            # but we do it anyway to detect any errors in the logic used in error reporting.
             if len(successors) == 0:
                 assert func.is_loop_latch(
                     node_name), "successors were trimmed but not a loop latch - this is not expected"
@@ -490,7 +509,8 @@ def debug_func_smt(func: dsa.Function, prelude_files: Sequence[str]) -> Tuple[Fa
 
             return diagnose_error(func, node_name, prog, not_taken_path, successors, prelude_files)
 
-        if isinstance(node, source.NodeCond) and len(successors) != 1:
+        # handle the case where we have two paths to take
+        if isinstance(node, source.NodeCond) and len(successors) == 2:
             node1 = successors[0]
             node2 = successors[1]
             not_taken_path_and_succ1 = not_taken_path.union(set([node1]))
@@ -501,6 +521,12 @@ def debug_func_smt(func: dsa.Function, prelude_files: Sequence[str]) -> Tuple[Fa
                 prog, prelude_files=prelude_files, assert_ok_nodes=not_taken_path_and_succ2)
             succ_node1_consistent, succ_node1_sat = get_sat(succ_node1_smtlib)
             succ_node2_consistent, succ_node2_sat = get_sat(succ_node2_smtlib)
+            # for some reason, the C parser will emit nonsense such as (assert True) => cond(when False) => assume True => Err.
+            # The consistentcy is used as an "reachability analysis" of sorts.
+            # This works because False `implies` True will give us False, returning an UNSAT (NOTE: this is before the UNSAT for the condition of program verification).
+
+            # let's assert that this consistency edge cased is only encountered for the above pattern.
+
             if succ_node1_sat == smt.CheckSatResult.UNSAT and succ_node2_sat == smt.CheckSatResult.UNSAT:
                 # DO NOT ADD TO NOT TAKEN PATH
                 if succ_node1_consistent:

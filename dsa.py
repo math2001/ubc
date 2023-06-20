@@ -29,6 +29,10 @@ BaseVar: TypeAlias = source.ExprVarT[BaseVarName]
 Var: TypeAlias = source.ExprVarT[Incarnation[BaseVarName]]
 
 
+DSANode = source.Node[Incarnation[source.ProgVarName | nip.GuardVarName]]
+DSAExprT = source.ExprT[Incarnation[source.ProgVarName | nip.GuardVarName]]
+
+
 @dataclass(frozen=True)
 class GenericFunction(ghost_code.GenericFunction[source.VarNameKind, source.VarNameKind2]):
     """ DSA Function """

@@ -428,10 +428,8 @@ def debug_func_smt(func: dsa.Function, prelude_files: Sequence[str]) -> Tuple[Fa
     prog = ap.make_prog(func)
     q: set[source.NodeName] = set([func.cfg.entry])
     not_taken_path: set[source.NodeName] = set([])
-    visited: set[source.NodeName] = set([])
     while len(q) != 0:
         node_name = q.pop()
-        visited = visited.union(set([node_name]))
         node = func.nodes[node_name]
         not_taken_path_and_node = not_taken_path.union(set([node_name]))
         node_smtlib = smt.make_smtlib(

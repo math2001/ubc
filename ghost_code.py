@@ -386,7 +386,53 @@ class TemporaryFunctionSignature:
     postcondition: source.ExprT[source.ProgVarName | nip.GuardVarName]
 
 
-def sprinkle_ghost_code(filename: str, func: nip.Function, unsafe_ctx: Mapping[str, syntax.Function]) -> Function:
+def sprinkle_handlerloop(fn: Function) -> Function:
+    handler_loop_node = ghost_data.handler_loop_node_name()
+    pre_after_name = source.NodeName(handler_loop_node)
+    post_before_name = source.NodeName(handler_loop_node)
+
+    def get_pre_insertion(node_name: source.NodeName, before: source.NodeName) -> Insertion:
+        pre_expr = ghost_data.handler_loop_iter_pre()
+        return Insertion(after=pre_after_name, before=before, mk_node=lambda succ: NodeLoopInvariantAssumption(origin=Provenance.HANDLER_LOOP_ITER_PRE, succ=succ, expr=pre_expr), node_name=node_name)
+
+    def get_post_insertion(node_name: source.NodeName, after: source.NodeName) -> Insertion:
+        post_expr = ghost_data.handler_loop_iter_post()
+        return Insertion(after=after, before=post_before_name, mk_node=lambda succ: NodeLoopInvariantProofObligation(origin=Provenance.HANDLER_LOOP_ITER_POST, succ_then=succ, succ_else=source.NodeNameErr, expr=post_expr), node_name=node_name)
+
+    insertions = []
+    for node_name in fn.traverse_topologically():
+        if node_name.startswith(f'loop_{handler_loop_node}_inv_asm_'):
+            before_name = node_name
+            split = node_name.split(f'loop_{handler_loop_node}_inv_asm_')
+            # one string, one number
+            assert len(split) == 2
+            # python raises ValueError for invalid parse attempts
+            num = int(split[1])
+            new_node_name = source.NodeName(f'handler_loop_pre_assume_{num}')
+            insertions.append(get_pre_insertion(new_node_name, before_name))
+
+        if node_name.startswith(f'loop_{handler_loop_node}_latch_'):
+            after_name = node_name
+            split = node_name.split(f'loop_{handler_loop_node}_latch_')
+            assert len(split) == 2
+            num = int(split[1])
+            if (node_name, post_before_name) not in fn.cfg.back_edges:
+                continue
+            new_node_name = source.NodeName(f'handler_loop_post_assert_{num}')
+            insertions.append(get_post_insertion(new_node_name, after_name))
+
+    new_nodes = apply_insertions(fn, insertions)
+    all_succs = abc_cfg.compute_all_successors_from_nodes(new_nodes)
+    cfg = abc_cfg.compute_cfg_from_all_succs(all_succs, fn.cfg.entry)
+    loops = abc_cfg.compute_loops(
+        new_nodes, cfg)
+    assert loops.keys() == fn.loops.keys(
+    ), "more work required: loop headers changed during conversion, need to keep ghost's loop invariant in sync"
+
+    return Function(name=fn.name, nodes=new_nodes, cfg=cfg, loops=loops, ghost=fn.ghost, signature=fn.signature, variables=fn.variables)
+
+
+def sprinkle_ghost_code_prime(filename: str, func: nip.Function, unsafe_ctx: Mapping[str, syntax.Function]) -> Function:
     ctx: dict[str, TemporaryFunctionSignature] = {}
     for fname, syn_func in unsafe_ctx.items():
         sig = source.convert_function_metadata(syn_func)
@@ -423,3 +469,10 @@ def sprinkle_ghost_code(filename: str, func: nip.Function, unsafe_ctx: Mapping[s
     ), "more work required: loop headers changed during conversion, need to keep ghost's loop invariant in sync"
 
     return Function(name=func.name, variables=func.variables | new_variables, nodes=new_nodes, cfg=cfg, loops=loops, ghost=func.ghost, signature=func.signature)
+
+
+def sprinkle_ghost_code(filename: str, func: nip.Function, unsafe_ctx: Mapping[str, syntax.Function]) -> Function:
+    fn = sprinkle_ghost_code_prime(filename, func, unsafe_ctx)
+    if filename != "tests/libsel4cp_trunc.txt" and func.name != "libsel4cp.handler_loop":
+        return fn
+    return sprinkle_handlerloop(fn)

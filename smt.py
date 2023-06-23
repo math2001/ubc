@@ -302,6 +302,8 @@ def emit_expr(expr: source.ExprT[assume_prove.VarName]) -> SMTLIB:
     elif isinstance(expr, source.ExprType):
         assert False, "what do i do with this?"
     elif isinstance(expr, source.ExprFunction):
+        if len(expr.arguments) == 0:
+            return SMTLIB(expr.function_name)
         return SMTLIB(f'({expr.function_name} {" ".join(emit_expr(arg) for arg in expr.arguments)})')
     assert_never(expr)
 
@@ -446,8 +448,8 @@ def emit_prelude() -> Sequence[Cmd]:
 
 
 def gen_mem_acc_prelude() -> SMTLIB:
-    raw = map(lambda x: x.format(MemSort=MEM_SORT), raw_mem_acc_prelude)
-    return SMTLIB('\n'.join(list(raw)))
+    raw = [x.format(MemSort=MEM_SORT)+"\n" for x in raw_mem_acc_prelude]
+    return SMTLIB(''.join(raw))
 
 
 def make_smtlib(p: assume_prove.AssumeProveProg, prelude_files: Sequence[str] = (), assert_ok_nodes: Collection[source.NodeName] = (), with_model: bool = False) -> SMTLIB:

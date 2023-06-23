@@ -183,8 +183,10 @@ type_pms: Type = TypeBuiltin(Builtin.PMS)
 # TODO: change this
 type_ghost: Type = TypeWordArray(50, 64)
 type_word8 = TypeBitVec(8)
+type_word12 = TypeBitVec(12)
 type_word16 = TypeBitVec(16)
 type_word32 = TypeBitVec(32)
+type_word52 = TypeBitVec(52)
 type_word64 = TypeBitVec(64)
 
 
@@ -575,6 +577,8 @@ expr_mul = mk_binary_bitvec_operation(Operator.TIMES)
 expr_plus = mk_binary_bitvec_operation(Operator.PLUS)
 expr_sub = mk_binary_bitvec_operation(Operator.MINUS)
 expr_udiv = mk_binary_bitvec_operation(Operator.DIVIDED_BY)
+expr_shift_left = mk_binary_bitvec_operation(Operator.SHIFT_LEFT)
+expr_shift_right = mk_binary_bitvec_operation(Operator.SHIFT_RIGHT)
 # don't implement expr_sdiv (cparser will never generate signed division)
 
 

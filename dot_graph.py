@@ -23,7 +23,7 @@ import ghost_code
 
 def pretty_name(name: Any) -> str:
     if isinstance(name, dsa.Incarnation):
-        return _pretty_name(name.base) + f"<sub>{name.inc}</sub>"
+        return _pretty_name(name.base) + f":{name.inc}"
 
     assert isinstance(name, str)
     return _pretty_name(name)
@@ -120,7 +120,7 @@ def pretty_safe_expr(expr: source.ExprT[Any], print_type: bool = False) -> str:
             ]
         return "{}({})".format(expr.operator.value, ", ".join(vals))
     elif isinstance(expr, source.ExprFunction):
-        return f"[smt]{expr.function_name}({', '.join(pretty_safe_expr(arg) for arg in expr.arguments)})"
+        return f"[smt]{expr.function_name.replace('<', '&lt;').replace('>', '&gt;')}({', '.join(pretty_safe_expr(arg) for arg in expr.arguments)})"
     else:
         return str(expr).replace('<', '&lt;').replace('>', '&gt;')
 

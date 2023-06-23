@@ -137,6 +137,10 @@ def determine_reason(node: DSANode) -> FailureReason:
         assert False, "didn't expect to see call stashing as being the failure reason"
     elif node.origin == Provenance.CALL_STASH_INITIAL_ARGS:
         assert False, "didn't expect to see initial call stashing as being the failure reason"
+    elif node.origin == Provenance.HANDLER_LOOP_ITER_PRE:
+        assert False, "didn't expect to see handler loop iter precondition assumption causing any problems"
+    elif node.origin == Provenance.HANDLER_LOOP_ITER_POST:
+        return FailureReason.UnknownFailure
     else:
         assert False, "unreachable"
 

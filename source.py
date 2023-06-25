@@ -638,7 +638,7 @@ def expr_implies(antecedent: ExprT[VarNameKind], consequent: ExprT[VarNameKind])
 
 
 def expr_split_conjuncts(expr: ExprT[VarNameKind]) -> Iterator[ExprT[VarNameKind]]:
-    if isinstance(expr, ExprOp) and expr.operator == Operator.AND:
+    if isinstance(expr, ExprOp) and expr.operator == Operator.AND and len(expr.operands) == 2:
         yield from expr_split_conjuncts(expr.operands[0])
         yield from expr_split_conjuncts(expr.operands[1])
     else:
@@ -1024,7 +1024,8 @@ class SpecGhost:
 This should be loaded from a specification description (ie. a prelude and list
 of spec ghosts). This will be done in the stage mentionned above.
 """
-spec_ghosts: tuple[SpecGhost, ...] = (SpecGhost(name="test", bit_size=32), )
+spec_ghosts: tuple[SpecGhost, ...] = (
+    SpecGhost(name="local_context", bit_size=407), )
 
 
 def mk_spec_ghost_var(sg: SpecGhost) -> ExprVarT[ProgVarName]:

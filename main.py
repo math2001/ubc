@@ -30,7 +30,8 @@ def assert_all_kernel_functions_are_reducible() -> None:
         for unsafe_func in functions.values():
             if not unsafe_func.entry:
                 continue
-            func = source.convert_function(unsafe_func)
+            func = source.convert_function(
+                unsafe_func)
             assert abc_cfg.is_reducible(func.cfg)
     print("[check] all kernel functions with an entry are reducible")
 
@@ -219,7 +220,8 @@ def debug1() -> None:
         for unsafe_func in functions.values():
             if not unsafe_func.entry:
                 continue
-            func = source.convert_function(unsafe_func)
+            func = source.convert_function(
+                unsafe_func)
             rets = set(var for var in func.all_variables() if var.name.startswith(
                 'ret__') and '.' not in var.name and not var.name.startswith('ret___'))
             if len(rets) > 1:
@@ -248,7 +250,8 @@ def debug() -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        epilog="Note: You can separate items explicitly by '--'")
     parser.add_argument("file", type=str, help="GraphLang file to use")
     parser.add_argument("fnames", default=[], nargs='*')
     parser.add_argument("-g", "--show-graph", help="Show the graph lang",

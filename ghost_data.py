@@ -1,4 +1,5 @@
 from typing import Mapping, Callable, Any
+from functools import reduce
 import source
 import nip
 
@@ -61,6 +62,9 @@ def i64v(name: str) -> source.ExprVarT[source.ProgVarName]:
     # return source.ExprVar(source.type_word64, source.HumanVarName(source.HumanVarNameSubject(name), use_guard=False, path=()))
     return source.ExprVar(source.type_word64, source.ProgVarName(name + "___long#v"))
 
+def u32(n: int) -> source.ExprNumT:
+    assert n <= 0xffff_ffff
+    return source.ExprNum(source.type_word32, n)
 
 def u32v(name: str) -> source.ExprVarT[source.ProgVarName]:
     # return source.ExprVar(source.type_word32, source.HumanVarName(source.HumanVarNameSubject(name), use_guard=False, path=()))
@@ -81,6 +85,9 @@ def u64(n: int) -> source.ExprNumT:
     assert n <= 0xffff_ffff_ffff_ffff
     return source.ExprNum(source.type_word64, n)
 
+def C_boolv(name: str) -> source.ExprVarT[source.ProgVarName]:
+    return source.ExprVar(source.type_word8, source.ProgVarName(name + "____Bool#v"))
+
 
 def g(var: source.ExprVarT[source.ProgVarName] | str) -> source.ExprVarT[nip.GuardVarName]:
     """ guard """
@@ -95,6 +102,9 @@ def charv(n: str) -> source.ExprVarT[source.ProgVarName]:
 
 def char(n: int) -> source.ExprNumT:
     return source.ExprNum(source.type_word8, n)
+
+
+msginfo = source.ExprVar(source.type_word64, source.ProgVarName('msginfo___struct_seL4_MessageInfo_C#v.words_C.0'))
 
 # i32ret = source.ExprVar(source.type_word32, source.HumanVarName(
 #     source.HumanVarNameSpecial.RET, use_guard=False, path=()))
@@ -520,6 +530,13 @@ def notified_postcondition(arg_lc: source.ExprT[source.ProgVarName], ret_lc: sou
     return eq(ret_lc, lc_prime)
 
 
+idx = u32v('idx')
+ch = u32v('ch')
+have_reply = C_boolv('have_reply')
+is_endpoint = u64v('is_endpoint')
+reply_tag = source.ExprVar(source.type_word64, source.ProgVarName('reply_tag___struct_seL4_MessageInfo_C#v.words_C.0'))
+lbadge = u64v('lbadge')
+
 universe: Mapping[str, Mapping[str, source.Ghost[source.ProgVarName | nip.GuardVarName]]] = {
     "tests/errors/errors.txt": {
         "tmp.private_hello": source.Ghost(
@@ -688,15 +705,14 @@ universe: Mapping[str, Mapping[str, source.Ghost[source.ProgVarName | nip.GuardV
                 eq(source.ExprFunction(Maybe_Prod_Ch_MsgInfo, lc_unhandled_ppcall, (arg(lc_progvar), )),
                    source.ExprFunction(Maybe_Prod_Ch_MsgInfo, Maybe_Prod_Ch_MsgInfo_Just, [
                        source.ExprFunction(Prod_Ch_MsgInfo, Prod_Ch_MsgInfo_fn, (
-                           # unsigned int is i64??
                            source.ExprFunction(
-                               Ch, C_channel_to_SMT_channel, (arg(u32v('ch')), )),
+                               Ch, C_channel_to_SMT_channel, (arg(ch), )),
                            source.ExprFunction(
-                               MsgInfo, C_msg_info_to_SMT_msg_info, (arg(i64v('msginfo')), )),
+                               MsgInfo, C_msg_info_to_SMT_msg_info, (arg(msginfo), )),
                        ))
                    ])),
                 source.ExprFunction(
-                    source.type_bool, C_channel_valid, (arg(u32v('ch')), )),
+                    source.type_bool, C_channel_valid, (arg(ch), )),
             ),
             postcondition=protected_postcondition(arg(lc_progvar), lc_progvar),
             loop_invariants={}
@@ -707,10 +723,10 @@ universe: Mapping[str, Mapping[str, source.Ghost[source.ProgVarName | nip.GuardV
                     source.ExprFunction(
                         Set_Ch, lc_unhandled_notified, (arg(lc_progvar), )),
                     source.ExprFunction(
-                        Ch, C_channel_to_SMT_channel, (arg(u32v('ch')), )),
+                        Ch, C_channel_to_SMT_channel, (arg(ch), )),
                 )),
                 source.ExprFunction(
-                    source.type_bool, C_channel_valid, (arg(u32v('ch')), )),
+                    source.type_bool, C_channel_valid, (arg(ch), )),
             ),
             postcondition=notified_postcondition(arg(lc_progvar), lc_progvar),
             loop_invariants={}
@@ -752,14 +768,14 @@ universe: Mapping[str, Mapping[str, source.Ghost[source.ProgVarName | nip.GuardV
         "libsel4cp.handler_loop": source.Ghost(loop_invariants={
             lh(handler_loop_node_name()): conjs(
                 source.expr_implies(
-                    neq(charv('have_reply____Bool#v'), char(0)),
-                    eq(g('reply_tag___struct_seL4_MessageInfo_C#v.words_C.0'), T),
+                    neq(have_reply, char(0)),
+                    eq(g(reply_tag), T),
                 ),
                 source.expr_implies(
-                    eq(g(u64v('is_endpoint')), T),
+                    eq(g(is_endpoint), T),
                     eq(
-                        neq(u64v('is_endpoint'), u64(0)),
-                        neq(charv('have_reply____Bool#v'),
+                        neq(is_endpoint, u64(0)),
+                        neq(have_reply, 
                             char(0))
                     )
                 ),
@@ -767,41 +783,41 @@ universe: Mapping[str, Mapping[str, source.Ghost[source.ProgVarName | nip.GuardV
                 eq(mem_assigned(), T),
                 eq(pms_assigned(), T),
                 eq(ghost_asserts_assigned(), T),
-                eq(g('have_reply____Bool#v'), T),
-                eq(g('local_context#ghost'), T),
+                eq(g(have_reply), T),
+                eq(g(lc_progvar), T),
 
                 source.expr_implies(
-                    conjs(eq(g('lbadge'), T), eq(u64v('lbadge'), i64(0))),
+                    conjs(eq(g(lbadge), T), eq(lbadge, i64(0))),
                     conjs(
-                        eq(u64v('is_endpoint'), i64(0)),
-                        eq(g('lbadge'), T),
-                        eq(g('idx'), T),
+                        eq(is_endpoint, i64(0)),
+                        eq(g(lbadge), T),
+                        eq(g(idx), T),
                         eq(htd_assigned(), T),
                         eq(mem_assigned(), T),
                         eq(pms_assigned(), T),
                         eq(ghost_asserts_assigned(), T),
                         # required for verification (loop 10 exit conds):
                         eq(
-                            u64v('lbadge'),
+                            lbadge,
                             source.expr_shift_right(
                                 source.ExprFunction(
                                     source.type_word64, lc_unhandled_notified, [lc_progvar]),
                                 source.ExprFunction(source.type_word64, source.FunctionName(
-                                    "(_ zero_extend 32)"), [i32v('idx')])
+                                    "(_ zero_extend 32)"), [idx])
                             )
                         ),
                         eq(
                             source.expr_shift_left(
-                                u64v('lbadge'),
+                                lbadge, 
                                 source.ExprFunction(source.type_word64, source.FunctionName(
-                                    "(_ zero_extend 32)"), [i32v('idx')])
+                                    "(_ zero_extend 32)"), [idx])
                             ),
                             source.ExprFunction(
                                 source.type_word64, lc_unhandled_notified, [lc_progvar]),
                         ),
                         ule(
-                            i32v('idx'),
-                            i32(63)
+                            idx,
+                            u32(63)
                         ),
                         eq(
                             i64(0),
@@ -814,7 +830,7 @@ universe: Mapping[str, Mapping[str, source.Ghost[source.ProgVarName | nip.GuardV
                         eq(
                             i64(0),
                             source.expr_shift_right(
-                                u64v('lbadge'),
+                                lbadge,
                                 i64(63)
                             )
                         ),
@@ -859,37 +875,37 @@ universe: Mapping[str, Mapping[str, source.Ghost[source.ProgVarName | nip.GuardV
                 ),
             ),
             lh('10'): conjs(
-                eq(u64v('is_endpoint'), u64(0)),
-                eq(g(u64v('lbadge')), T),
-                eq(g('idx___unsigned#v'), T),
+                eq(is_endpoint, u64(0)),
+                eq(g(lbadge), T),
+                eq(g(idx), T),
                 eq(htd_assigned(), T),
                 eq(mem_assigned(), T),
                 eq(pms_assigned(), T),
                 eq(ghost_asserts_assigned(), T),
-                eq(g('local_context#ghost'), T),
+                eq(g(lc_progvar), T),
 
                 # required for functional correctness
                 eq(
-                    u64v('lbadge'),
+                    lbadge,
                     source.expr_shift_right(
                         source.ExprFunction(
                             source.type_word64, lc_unhandled_notified, [lc_progvar]),
                         source.ExprFunction(source.type_word64, source.FunctionName(
-                            "(_ zero_extend 32)"), [i32v('idx')])
+                            "(_ zero_extend 32)"), [idx])
                     )
                 ),
                 eq(
                     source.expr_shift_left(
-                        u64v('lbadge'),
+                        lbadge,
                         source.ExprFunction(source.type_word64, source.FunctionName(
-                            "(_ zero_extend 32)"), [i32v('idx')])
+                            "(_ zero_extend 32)"), [idx])
                     ),
                     source.ExprFunction(
                         source.type_word64, lc_unhandled_notified, [lc_progvar]),
                 ),
                 ule(
-                    i32v('idx'),
-                    i32(63)
+                    idx,
+                    u32(63)
                 ),
                 eq(
                     u64(0),
@@ -902,7 +918,7 @@ universe: Mapping[str, Mapping[str, source.Ghost[source.ProgVarName | nip.GuardV
                 eq(
                     u64(0),
                     source.expr_shift_right(
-                        u64v('lbadge'),
+                        lbadge,
                         u64(63)
                     )
                 ),

@@ -1024,8 +1024,7 @@ class SpecGhost:
 This should be loaded from a specification description (ie. a prelude and list
 of spec ghosts). This will be done in the stage mentionned above.
 """
-spec_ghosts: tuple[SpecGhost, ...] = (
-    SpecGhost(name="local_context", bit_size=407), )
+spec_ghosts: tuple[SpecGhost, ...] = (SpecGhost(name="test", bit_size=32), )
 
 
 def mk_spec_ghost_var(sg: SpecGhost) -> ExprVarT[ProgVarName]:

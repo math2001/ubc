@@ -264,6 +264,11 @@ def handler_loop_node_name() -> str:
 lc_progvar = source.ExprVar(typ=source.TypeBitVec(
     407), name=source.ProgVarName("local_context#ghost"))
 
+
+def lc_assigned() -> source.ExprVarT[nip.GuardVarName]:
+    return g(lc_progvar)
+
+
 handle_loop_pre_oracle: source.ExprT[Any] = source.ExprFunction(
     NextRecv, source.FunctionName('handler_loop_pre_receive_oracle'), [])
 handle_loop_pre_oracle_ty: source.ExprT[Any] = source.ExprFunction(
@@ -782,6 +787,7 @@ universe: Mapping[str, Mapping[str, source.Ghost[source.ProgVarName | nip.GuardV
                 eq(htd_assigned(), T),
                 eq(mem_assigned(), T),
                 eq(pms_assigned(), T),
+                eq(lc_assigned(), T),
                 eq(ghost_asserts_assigned(), T),
                 eq(g(have_reply), T),
                 eq(g(lc_progvar), T),
@@ -795,6 +801,7 @@ universe: Mapping[str, Mapping[str, source.Ghost[source.ProgVarName | nip.GuardV
                         eq(htd_assigned(), T),
                         eq(mem_assigned(), T),
                         eq(pms_assigned(), T),
+                        eq(lc_assigned(), T),
                         eq(ghost_asserts_assigned(), T),
                         # required for verification (loop 10 exit conds):
                         eq(
@@ -881,6 +888,7 @@ universe: Mapping[str, Mapping[str, source.Ghost[source.ProgVarName | nip.GuardV
                 eq(htd_assigned(), T),
                 eq(mem_assigned(), T),
                 eq(pms_assigned(), T),
+                eq(lc_assigned(), T),
                 eq(ghost_asserts_assigned(), T),
                 eq(g(lc_progvar), T),
 

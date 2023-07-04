@@ -316,9 +316,9 @@
 
 (define-sort NextRecv () (_ BitVec 72))
 (define-sort NextRecv<> () (_ BitVec 2))
-(declare-fun <NR_Notification> () NextRecv<>)
-(declare-fun <NR_PPCall> () NextRecv<>)
-(declare-fun <NR_Unknown> () NextRecv<>)
+(define-fun <NR_Notification> () NextRecv<> (_ bv0 2))
+(define-fun <NR_PPCall> () NextRecv<> (_ bv1 2))
+(define-fun <NR_Unknown> () NextRecv<> (_ bv2 2))
 (assert (distinct <NR_Notification> <NR_PPCall> <NR_Unknown>))
 (define-fun NextRecv.<> ((v NextRecv)) NextRecv<> ((_ extract 71 70) v))
 (define-fun NR_Notification.1 ((v NextRecv)) Ch_set ((_ extract 69 6) v))
@@ -378,9 +378,4 @@
 (define-fun C_msg_info_to_SMT_msg_info ((mi (_ BitVec 64))) MsgInfo mi)
 ; to compare msg info, just use equality, all the bits are significant
 ; only compares the label field
-
-(declare-fun lc_arbitrary_1 () (_ BitVec 407))
-(declare-fun lc_arbitrary_2 () (_ BitVec 407))
-(declare-fun lc_arbitrary_3 () (_ BitVec 407))
-(declare-fun lc_arbitrary_4 () (_ BitVec 407))
 ; end of prelude

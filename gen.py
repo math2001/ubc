@@ -58,7 +58,7 @@ def gen_set_type(ext_type: ExternType, over_arrays: bool = False) -> ExternType:
         print(
             f'(define-fun {add} ((s {set_type.name}) (x {ext_type.name})) {set_type.name} ({union} s ({singleton} x)))')
         print(
-            f'(define-fun {remove} ((s {set_type.name}) (x {ext_type.name})) {set_type.name} ({intersection} s ({singleton} x)))')
+            f'(define-fun {remove} ((s {set_type.name}) (x {ext_type.name})) {set_type.name} ({intersection} s (bvnot ({singleton} x))))')
 
     print()
     if not EMIT_TESTS:
@@ -513,7 +513,7 @@ NextRecv = gen_nonrec_data_type('NextRecv', {
     'NR_Notification': (Set_Ch, ),
     'NR_PPCall': (Prod_Ch_MsgInfo, ),
     'NR_Unknown': ()
-})
+}, assign_values_to_constructors=True)
 Maybe_MsgInfo = gen_maybe_type(MsgInfo)
 Maybe_Prod_Ch_MsgInfo = gen_maybe_type(Prod_Ch_MsgInfo)
 

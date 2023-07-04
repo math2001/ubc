@@ -481,7 +481,8 @@ def pretty_expr_ascii(expr: ExprT[VarNameKind]) -> str:
         assert False, f'{expr}'
     elif isinstance(expr, ExprOp):
         if expr.operator in pretty_binary_operators_ascii:
-            assert len(expr.operands) == 2
+            assert len(
+                expr.operands) == 2, f"{len(expr.operands)} {expr.operator}"
             return f'({pretty_expr_ascii(expr.operands[0])} {pretty_binary_operators_ascii[expr.operator]} {pretty_expr_ascii(expr.operands[1])})'
         elif expr.operator == Operator.IF_THEN_ELSE:
             assert len(expr.operands) == 3
@@ -638,9 +639,9 @@ def expr_implies(antecedent: ExprT[VarNameKind], consequent: ExprT[VarNameKind])
 
 
 def expr_split_conjuncts(expr: ExprT[VarNameKind]) -> Iterator[ExprT[VarNameKind]]:
-    if isinstance(expr, ExprOp) and expr.operator == Operator.AND and len(expr.operands) == 2:
-        yield from expr_split_conjuncts(expr.operands[0])
-        yield from expr_split_conjuncts(expr.operands[1])
+    if isinstance(expr, ExprOp) and expr.operator == Operator.AND:
+        for operand in expr.operands:
+            yield from expr_split_conjuncts(operand)
     else:
         yield expr
 
@@ -775,6 +776,7 @@ class NodeAssume(ABCNode[VarNameKind]):
     succ: NodeName
 
 
+# TODO: no one uses this, get rid of it
 @dataclass(frozen=True)
 class NodeAssert(ABCNode[VarNameKind]):
     expr: ExprT[VarNameKind]

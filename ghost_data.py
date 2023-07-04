@@ -62,9 +62,11 @@ def i64v(name: str) -> source.ExprVarT[source.ProgVarName]:
     # return source.ExprVar(source.type_word64, source.HumanVarName(source.HumanVarNameSubject(name), use_guard=False, path=()))
     return source.ExprVar(source.type_word64, source.ProgVarName(name + "___long#v"))
 
+
 def u32(n: int) -> source.ExprNumT:
     assert n <= 0xffff_ffff
     return source.ExprNum(source.type_word32, n)
+
 
 def u32v(name: str) -> source.ExprVarT[source.ProgVarName]:
     # return source.ExprVar(source.type_word32, source.HumanVarName(source.HumanVarNameSubject(name), use_guard=False, path=()))
@@ -85,6 +87,7 @@ def u64(n: int) -> source.ExprNumT:
     assert n <= 0xffff_ffff_ffff_ffff
     return source.ExprNum(source.type_word64, n)
 
+
 def C_boolv(name: str) -> source.ExprVarT[source.ProgVarName]:
     return source.ExprVar(source.type_word8, source.ProgVarName(name + "____Bool#v"))
 
@@ -104,7 +107,8 @@ def char(n: int) -> source.ExprNumT:
     return source.ExprNum(source.type_word8, n)
 
 
-msginfo = source.ExprVar(source.type_word64, source.ProgVarName('msginfo___struct_seL4_MessageInfo_C#v.words_C.0'))
+msginfo = source.ExprVar(source.type_word64, source.ProgVarName(
+    'msginfo___struct_seL4_MessageInfo_C#v.words_C.0'))
 
 # i32ret = source.ExprVar(source.type_word32, source.HumanVarName(
 #     source.HumanVarNameSpecial.RET, use_guard=False, path=()))
@@ -247,7 +251,6 @@ def mem_assigned() -> source.ExprVarT[nip.GuardVarName]:
 
 def pms_assigned() -> source.ExprVarT[nip.GuardVarName]:
     return g(source.ExprVar(source.type_bool, source.ProgVarName('PMS')))
-
 
 def ghost_asserts_assigned() -> source.ExprVarT[nip.GuardVarName]:
     return g(source.ExprVar(source.type_bool, source.ProgVarName('GhostAssertions')))
@@ -539,7 +542,8 @@ idx = u32v('idx')
 ch = u32v('ch')
 have_reply = C_boolv('have_reply')
 is_endpoint = u64v('is_endpoint')
-reply_tag = source.ExprVar(source.type_word64, source.ProgVarName('reply_tag___struct_seL4_MessageInfo_C#v.words_C.0'))
+reply_tag = source.ExprVar(source.type_word64, source.ProgVarName(
+    'reply_tag___struct_seL4_MessageInfo_C#v.words_C.0'))
 lbadge = u64v('lbadge')
 
 universe: Mapping[str, Mapping[str, source.Ghost[source.ProgVarName | nip.GuardVarName]]] = {
@@ -780,7 +784,7 @@ universe: Mapping[str, Mapping[str, source.Ghost[source.ProgVarName | nip.GuardV
                     eq(g(is_endpoint), T),
                     eq(
                         neq(is_endpoint, u64(0)),
-                        neq(have_reply, 
+                        neq(have_reply,
                             char(0))
                     )
                 ),
@@ -815,7 +819,7 @@ universe: Mapping[str, Mapping[str, source.Ghost[source.ProgVarName | nip.GuardV
                         ),
                         eq(
                             source.expr_shift_left(
-                                lbadge, 
+                                lbadge,
                                 source.ExprFunction(source.type_word64, source.FunctionName(
                                     "(_ zero_extend 32)"), [idx])
                             ),

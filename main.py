@@ -7,6 +7,7 @@ import os
 from typing_extensions import assert_never
 from dot_graph import viz_function, viz_raw_function
 import error_reporting as er
+from split_prove_nodes import split_prove_nodes
 
 import syntax
 import source
@@ -86,6 +87,8 @@ class CmdlineOption(Enum):
     SHOW_LINE_NUMBERS = '--ln'
     """ Shows line numbers for the smt """
 
+    SPLIT_PROVE_CONJUNCTIONS = "--split-prove-conjunctions"
+
 
 def find_functions_by_name(function_names: Collection[str], target: str) -> str:
     if target in function_names:
@@ -159,6 +162,9 @@ def run(filename: str, function_names: Collection[str], options: Collection[Cmdl
             filename, nip_func, functions)
         if CmdlineOption.SHOW_GHOST in options:
             viz_function(ghost_func)
+
+        if CmdlineOption.SPLIT_PROVE_CONJUNCTIONS in options:
+            ghost_func = split_prove_nodes(ghost_func)
 
         dsa_func = dsa.dsa(ghost_func)
         if CmdlineOption.SHOW_DSA in options:
@@ -266,6 +272,9 @@ def main() -> None:
                         default=False, action="store_true")
     parser.add_argument("-s", "--show-smt", help="Show the SMT given to the solvers",
                         default=False, action="store_true")
+    parser.add_argument("-/", "--split-prove-conjunctions", help="split prove nodes of conjunction of n terms into n prove nodes. "
+                        "Shouldn't be used when doing the final proof",
+                        default=False, action="store_true")
     parser.add_argument("-r", "--show-sats", help="Show the raw results from the smt solvers",
                         default=False, action="store_true")
     parser.add_argument("-p", "--preludes", default=[], nargs="+")
@@ -287,6 +296,7 @@ def main() -> None:
         debug()
         exit(0)
 
+    # FIXME: uh why are we doing this? just pass args straight
     options: set[CmdlineOption] = set([])
     if args.show_graph:
         options.add(CmdlineOption.SHOW_GRAPH)
@@ -302,6 +312,8 @@ def main() -> None:
         options.add(CmdlineOption.SHOW_SMT)
     if args.show_sats:
         options.add(CmdlineOption.SHOW_SATS)
+    if args.split_prove_conjunctions:
+        options.add(CmdlineOption.SPLIT_PROVE_CONJUNCTIONS)
     run(args.file, args.fnames, options, args.preludes)
 
 

@@ -337,7 +337,7 @@ def send_smtlib_model(smtlib: smt.SMTLIB, solver_type: smt.SolverType) -> smt.Re
 def get_relevant_responses(node_vars: Set[source.ExprVarT[ap.VarName]], responses: smt.Responses) -> None:
     nodeNameErrOk = smt.identifier(ap.node_ok_name(source.NodeNameErr))
     rel_vars = set([smt.identifier(x.name)
-                   for x in node_vars if smt.identifier(x.name) != nodeNameErrOk])
+                    for x in node_vars if smt.identifier(x.name) != nodeNameErrOk])
 
     for res in responses:
         if isinstance(res, smt.CheckSatResponse):
@@ -498,7 +498,7 @@ def debug_func_smt(func: dsa.Function, prelude_files: Sequence[str]) -> Tuple[Fa
                 # or in the case where the errors aren't just in our graph, we have assumed
                 # that the other subgraphs are correct by the usage of the not_taken_path.
                 my_succs = list(filter(lambda x: x != source.NodeNameErr and x !=
-                                source.NodeNameRet, func.cfg.all_succs[node_name]))
+                                       source.NodeNameRet, func.cfg.all_succs[node_name]))
                 my_succ_smtlib = smt.make_smtlib(
                     prog, prelude_files=prelude_files, assert_ok_nodes=not_taken_path.union(set(my_succs)))
                 my_succ_const, my_succ_sat = get_sat(my_succ_smtlib)

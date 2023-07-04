@@ -8,6 +8,7 @@ import smt
 import syntax
 import ghost_data
 import ghost_code
+import split_prove_nodes
 from typing import Dict
 
 # global variables are bad :(
@@ -30,6 +31,7 @@ def verify(filename: str, unsafe_func: syntax.Function, ctx: Dict[str, syntax.Fu
         ghost_data.get(filename, unsafe_func.name))
     nip_func = nip.nip(prog_func)
     ghost_func = ghost_code.sprinkle_ghost_code(filename, nip_func, ctx)
+    # ghost_func = split_prove_nodes.split_prove_nodes(ghost_func)
     dsa_func = dsa.dsa(ghost_func)
 
     prog = assume_prove.make_prog(dsa_func)

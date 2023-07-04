@@ -523,13 +523,13 @@ def notified_postcondition(arg_lc: source.ExprT[source.ProgVarName], ret_lc: sou
         lc_unhandled_notified_val=source.ExprFunction(Set_Ch, Ch_set_remove,
                                                       (source.ExprFunction(Set_Ch,  lc_unhandled_notified, (arg_lc, ), ),
                                                        source.ExprFunction(
-                                                          Ch, C_channel_to_SMT_channel, (u32v('ch'),))
+                                                          Ch, C_channel_to_SMT_channel, (arg(u32v('ch')),))
                                                        )),
         lc_last_handled_notified_val=source.ExprFunction(Set_Ch, Ch_set_add, [
             source.ExprFunction(
                 Set_Ch, lc_last_handled_notified, (arg_lc,)),
             source.ExprFunction(
-                Ch, C_channel_to_SMT_channel, (u32v('ch'),))])
+                Ch, C_channel_to_SMT_channel, (arg(u32v('ch')),))])
     )
 
     return eq(ret_lc, lc_prime)

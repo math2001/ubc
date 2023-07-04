@@ -252,6 +252,7 @@ def mem_assigned() -> source.ExprVarT[nip.GuardVarName]:
 def pms_assigned() -> source.ExprVarT[nip.GuardVarName]:
     return g(source.ExprVar(source.type_bool, source.ProgVarName('PMS')))
 
+
 def ghost_asserts_assigned() -> source.ExprVarT[nip.GuardVarName]:
     return g(source.ExprVar(source.type_bool, source.ProgVarName('GhostAssertions')))
 
@@ -538,447 +539,6 @@ def notified_postcondition(arg_lc: source.ExprT[source.ProgVarName], ret_lc: sou
     return eq(ret_lc, lc_prime)
 
 
-idx = u32v('idx')
-ch = u32v('ch')
-have_reply = C_boolv('have_reply')
-is_endpoint = u64v('is_endpoint')
-reply_tag = source.ExprVar(source.type_word64, source.ProgVarName(
-    'reply_tag___struct_seL4_MessageInfo_C#v.words_C.0'))
-lbadge = u64v('lbadge')
-
-universe: Mapping[str, Mapping[str, source.Ghost[source.ProgVarName | nip.GuardVarName]]] = {
-    "tests/errors/errors.txt": {
-        "tmp.private_hello": source.Ghost(
-            precondition=eq(arg(i32v('hx')), i32(0)),
-            postcondition=T,
-            loop_invariants={}
-        )
-    },
-    "tests/all.txt": {
-        # 3 <= i ==> a = 1
-        # 3:w32 <=s i:w32 ==> a:w32 = 1:w32
-        "tmp.undefined_var_with_loops": source.Ghost(
-            loop_invariants={
-                lh("5"): conj(imp(sle(i32(3), i32v("i")), eq(i32v("a"), i32(1))), sbounded(i32v("i"), i32(0), i32(5)))
-            },
-            precondition=T,
-            postcondition=T,
-        ),
-
-        "tmp.multiple_loops___fail_missing_invariant": source.Ghost(
-            loop_invariants={
-                # no need to think, i is always going to be less than 200, and
-                # that's enough to prove no overflows
-                lh('17'): sbounded(i32v('i'), i32(0), i32(200)),
-                lh('4'): sbounded(i32v('i'), i32(0), i32(200)),
-                lh('8'): sbounded(i32v('i'), i32(0), i32(200)),
-
-            },
-            precondition=T,
-            postcondition=T,
-        ),
-
-        "tmp.arith_sum": source.Ghost(
-            loop_invariants={
-                # 0 <= i <= n
-                # s = i * (i - 1) / 2
-                # i#assigned
-                # s#assigned
-                lh('5'): conjs(
-                    sbounded(i32v('i'), i32(0), i32v('n')),
-                    eq(i32v('s'), udiv(mul(i32v('i'), sub(i32v('i'), i32(1))), i32(2))),
-                    g(i32v('i')),
-                    g(i32v('s'))),
-            },
-            precondition=sbounded(arg(i32v('n')), i32(0), i32(100)),
-            postcondition=T,
-            # postcondition=eq(i32ret, udiv(
-            #     mul(arg(i32v('n')), sub(arg(i32v('i')), i32(1))), i32(2))),
-        ),
-
-        "tmp.multiple_ret_incarnations___fail_missing_invariants": source.Ghost(
-            loop_invariants={lh('5'): T},
-            precondition=sle(i32(0), arg(i32v('n'))),
-            postcondition=eq(i32ret, udiv(arg(i32v('n')), i32(2))),
-        ),
-
-        "tmp.callee": source.Ghost(
-            loop_invariants={},
-            precondition=sle(arg(i32v('a')), i32(100)),
-            postcondition=eq(i32ret, plus(arg(i32v('a')), i32(1)))
-        ),
-
-        "tmp.caller": source.Ghost(
-            loop_invariants={},
-            precondition=sbounded(arg(i32v('b')), i32(-100), i32(100)),
-            postcondition=eq(i32ret, mul(plus(arg(i32v('b')), i32(1)), i32(2)))),
-
-        "tmp.caller2": source.Ghost(
-            loop_invariants={},
-            precondition=sbounded(arg(i32v('b')), i32(-100), i32(100)),
-            postcondition=eq(i32ret, mul(plus(arg(i32v('b')), i32(1)), mul(plus(arg(i32v('b')), i32(1)), i32(2))))),
-
-        "tmp.caller2___fails_wrong_post_condition": source.Ghost(
-            loop_invariants={},
-            precondition=sbounded(arg(i32v('b')), i32(-100), i32(100)),
-            postcondition=eq(i32ret, i32(0))),
-
-        "tmp.caller3": source.Ghost(
-            loop_invariants={},
-            precondition=sbounded(arg(i32v('b')), i32(-100), i32(100)),
-            postcondition=eq(i32ret, i32(0))),
-
-        "tmp.f_many_args": source.Ghost(
-            loop_invariants={},
-            precondition=conjs(
-                sbounded(arg(i32v('b')), i32(-100), i32(100)),
-                sbounded(arg(i32v('c')), i32(-100), i32(100))
-            ),
-            postcondition=conjs(
-                imp(slt(i32(0), arg(i32v('a'))), eq(
-                    i32ret, mul(plus(arg(i32v('b')), i32(1)), i32(2)))),
-                imp(neg(slt(i32(0), arg(i32v('a')))), eq(
-                    i32ret, mul(sub(arg(i32v('c')), i32(1)), i32(2)))),
-            ),
-        ),
-
-        "tmp.call_many_args": source.Ghost(
-            loop_invariants={},
-            precondition=sbounded(arg(i32v('flag')), i32(-10), i32(10)),
-            postcondition=conjs(
-                # imp(slt(i32(0), arg(i32v('flag'))), eq(i32ret, plus(
-                #     i32(4), mul(plus(arg(i32v('flag')), i32(1)), i32(2))))),
-                # imp(neg(slt(i32(0), arg(i32v('flag')))), eq(i32ret, plus(
-                #     i32(2), mul(sub(arg(i32v('flag')), i32(1)), i32(2))))),
-                T,
-                imp(eq(arg(i32v('flag')), i32(0)),
-                    eq(i32ret, i32(0))),
-
-            ),
-        ),
-
-        "tmp.call_many_args_once": source.Ghost(
-            loop_invariants={},
-            precondition=conjs(sbounded(arg(i32v('x')), i32(-10), i32(10)),
-                               sbounded(arg(i32v('y')), i32(-10), i32(10))),
-            postcondition=eq(i32ret, mul(sub(arg(i32v('y')), i32(1)), i32(2))),
-        ),
-
-        "tmp.ghost_add_1__fail": source.Ghost(loop_invariants={},
-                                              precondition=T,
-                                              postcondition=eq(testghost, plus(arg(testghost), i32(1)))),
-
-        "tmp.ghost_add_3": source.Ghost(loop_invariants={},
-                                        precondition=T,
-                                        postcondition=eq(testghost, plus(arg(testghost), i32(3)))),
-        "tmp.ghost_add_2__fail": source.Ghost(loop_invariants={},
-                                              precondition=T,
-                                              postcondition=eq(testghost, plus(arg(testghost), i32(2)))),
-
-        "tmp.concrete_ghost_interaction": source.Ghost(
-            loop_invariants={
-                lh('3'): conjs(g(i32v('i')),
-                               g(i32v('n')),
-                               g('GhostAssertions'),
-                               g('Mem'),
-                               g(testghost),
-                               g('PMS'),
-                               g('HTD'),
-                               sbounded(i32v('i'), i32(0), i32v('n')),
-                               eq(testghost, plus(arg(testghost), i32v('i')))
-                               )
-            },
-            precondition=sbounded(arg(i32v('n')), i32(0), i32(10)),
-            postcondition=eq(testghost, plus(arg(testghost), arg(i32v('n'))))),
-
-        "tmp.concrete_ghost_interaction__fail": source.Ghost(
-            loop_invariants={
-                lh('3'): conjs(g(i32v('i')),
-                               g(i32v('n')),
-                               g('GhostAssertions'),
-                               g('Mem'),
-                               g(testghost),
-                               g('PMS'),
-                               g('HTD'),
-                               sbounded(i32v('i'), i32(0), i32v('n')),
-                               eq(testghost, plus(arg(testghost), i32v('i')))
-                               )
-            },
-            precondition=sbounded(arg(i32v('n')), i32(0), i32(10)),
-            postcondition=eq(testghost, plus(arg(testghost), plus(arg(i32v('n')), i32(1)))))
-        # the +1 breaks everything here
-    },
-    "tests/libsel4cp_trunc.txt": {
-        "libsel4cp.protected": source.Ghost(
-            precondition=conjs(
-                eq(source.ExprFunction(Maybe_Prod_Ch_MsgInfo, lc_unhandled_ppcall, (arg(lc_progvar), )),
-                   source.ExprFunction(Maybe_Prod_Ch_MsgInfo, Maybe_Prod_Ch_MsgInfo_Just, [
-                       source.ExprFunction(Prod_Ch_MsgInfo, Prod_Ch_MsgInfo_fn, (
-                           source.ExprFunction(
-                               Ch, C_channel_to_SMT_channel, (arg(ch), )),
-                           source.ExprFunction(
-                               MsgInfo, C_msg_info_to_SMT_msg_info, (arg(msginfo), )),
-                       ))
-                   ])),
-                source.ExprFunction(
-                    source.type_bool, C_channel_valid, (arg(ch), )),
-            ),
-            postcondition=protected_postcondition(arg(lc_progvar), lc_progvar),
-            loop_invariants={}
-        ),
-        "libsel4cp.notified": source.Ghost(
-            precondition=conjs(
-                source.ExprFunction(source.type_bool, Ch_set_has, (
-                    source.ExprFunction(
-                        Set_Ch, lc_unhandled_notified, (arg(lc_progvar), )),
-                    source.ExprFunction(
-                        Ch, C_channel_to_SMT_channel, (arg(ch), )),
-                )),
-                source.ExprFunction(
-                    source.type_bool, C_channel_valid, (arg(ch), )),
-            ),
-            postcondition=notified_postcondition(arg(lc_progvar), lc_progvar),
-            loop_invariants={}
-        ),
-        "libsel4cp.seL4_Recv": source.Ghost(
-            precondition=conjs(
-                neq(source.ExprFunction(NextRecv, lc_receive_oracle, (arg(lc_progvar),)),
-                    source.ExprFunction(NextRecv, NR_Unknown, ())),
-                neq(source.ExprFunction(NextRecv, lc_receive_oracle, (arg(lc_progvar),)),
-                    source.ExprFunction(NextRecv, NR_Notification, (Ch_empty_fn,))),
-                eq(source.ExprFunction(Set_Ch, lc_unhandled_notified, (arg(lc_progvar),)),
-                   Ch_empty_fn),
-                eq(source.ExprFunction(Maybe_Prod_Ch_MsgInfo, lc_unhandled_ppcall, (arg(lc_progvar),)),
-                   source.ExprFunction(Maybe_Prod_Ch_MsgInfo, Prod_Ch_MsgInfo_Nothing, [])),
-                eq(source.ExprFunction(Maybe_MsgInfo, lc_unhandled_reply, (arg(lc_progvar),)),
-                   source.ExprFunction(Maybe_MsgInfo, MsgInfo_Nothing, [])),
-            ),
-            postcondition=recv_postcondition(
-                arg(lc_progvar), lc_progvar, msg_info_ret),
-            loop_invariants={}
-        ),
-        "libsel4cp.seL4_ReplyRecv": source.Ghost(
-            precondition=conjs(
-                neg(eq(source.ExprFunction(NextRecv, lc_receive_oracle, (arg(lc_progvar),)),
-                       source.ExprFunction(NextRecv, NR_Unknown, []))),
-                neg(eq(source.ExprFunction(NextRecv, lc_receive_oracle, (arg(lc_progvar),)),
-                       source.ExprFunction(NextRecv, NR_Notification, (Ch_empty_fn,)))),
-                eq(source.ExprFunction(Set_Ch, lc_unhandled_notified, (arg(lc_progvar),)),
-                   Ch_empty_fn),
-                eq(source.ExprFunction(Maybe_Prod_Ch_MsgInfo, lc_unhandled_ppcall, (arg(lc_progvar),)),
-                   source.ExprFunction(Maybe_Prod_Ch_MsgInfo, Prod_Ch_MsgInfo_Nothing, [])),
-                neg(eq(source.ExprFunction(Maybe_MsgInfo, lc_unhandled_reply, (arg(lc_progvar),)),
-                       source.ExprFunction(Maybe_MsgInfo, MsgInfo_Nothing, []))),
-            ),
-            postcondition=replyrecv_postcondition(
-                arg(lc_progvar), lc_progvar, msg_info_ret),
-            loop_invariants={}
-        ),
-        "libsel4cp.handler_loop": source.Ghost(loop_invariants={
-            lh(handler_loop_node_name()): conjs(
-                source.expr_implies(
-                    neq(have_reply, char(0)),
-                    eq(g(reply_tag), T),
-                ),
-                source.expr_implies(
-                    eq(g(is_endpoint), T),
-                    eq(
-                        neq(is_endpoint, u64(0)),
-                        neq(have_reply,
-                            char(0))
-                    )
-                ),
-                eq(htd_assigned(), T),
-                eq(mem_assigned(), T),
-                eq(pms_assigned(), T),
-                eq(lc_assigned(), T),
-                eq(ghost_asserts_assigned(), T),
-                eq(g(have_reply), T),
-                eq(g(lc_progvar), T),
-
-                source.expr_implies(
-                    conjs(eq(g(lbadge), T), eq(lbadge, i64(0))),
-                    conjs(
-                        eq(is_endpoint, i64(0)),
-                        eq(g(lbadge), T),
-                        eq(g(idx), T),
-                        eq(htd_assigned(), T),
-                        eq(mem_assigned(), T),
-                        eq(pms_assigned(), T),
-                        eq(lc_assigned(), T),
-                        eq(ghost_asserts_assigned(), T),
-                        # required for verification (loop 10 exit conds):
-                        eq(
-                            lbadge,
-                            source.expr_shift_right(
-                                source.ExprFunction(
-                                    source.type_word64, lc_unhandled_notified, [lc_progvar]),
-                                source.ExprFunction(source.type_word64, source.FunctionName(
-                                    "(_ zero_extend 32)"), [idx])
-                            )
-                        ),
-                        eq(
-                            source.expr_shift_left(
-                                lbadge,
-                                source.ExprFunction(source.type_word64, source.FunctionName(
-                                    "(_ zero_extend 32)"), [idx])
-                            ),
-                            source.ExprFunction(
-                                source.type_word64, lc_unhandled_notified, [lc_progvar]),
-                        ),
-                        ule(
-                            idx,
-                            u32(63)
-                        ),
-                        eq(
-                            i64(0),
-                            source.expr_shift_right(
-                                source.ExprFunction(
-                                    source.type_word64, lc_unhandled_notified, [lc_progvar]),
-                                i64(63)
-                            )
-                        ),
-                        eq(
-                            i64(0),
-                            source.expr_shift_right(
-                                lbadge,
-                                i64(63)
-                            )
-                        ),
-                        eq(
-                            source.ExprFunction(source.type_word64, source.FunctionName("Ch_set_intersection"), [
-                                source.ExprFunction(
-                                    source.type_word64, lc_unhandled_notified, [lc_progvar]),
-                                source.ExprFunction(
-                                    source.type_word64, lc_last_handled_notified, [lc_progvar])
-                            ]),
-                            source.ExprFunction(
-                                source.type_word64, source.FunctionName("Ch_set_empty"), [])
-                        ),
-                        eq(
-                            source.ExprFunction(source.type_word64, source.FunctionName("Ch_set_union"), [
-                                source.ExprFunction(
-                                    source.type_word64, lc_unhandled_notified, [lc_progvar]),
-                                source.ExprFunction(
-                                    source.type_word64, lc_last_handled_notified, [lc_progvar])
-                            ]),
-                            source.ExprFunction(Set_Ch, NextRecvNotificationGet, [source.ExprFunction(
-                                NextRecv, source.FunctionName('handler_loop_pre_receive_oracle'), [])])
-                        ),
-                        eq(
-                            source.ExprFunction(
-                                Maybe_Prod_Ch_MsgInfo, Prod_Ch_MsgInfo_Nothing, []),
-                            source.ExprFunction(
-                                Maybe_Prod_Ch_MsgInfo, lc_unhandled_ppcall, [lc_progvar]),
-                        ),
-                        eq(
-                            source.ExprFunction(Maybe_MsgInfo, source.FunctionName(
-                                "handler_loop_pre_unhandled_reply"), []),
-                            source.ExprFunction(
-                                Maybe_MsgInfo, lc_last_handled_reply, [lc_progvar]),
-                        ),
-                        eq(
-                            source.ExprFunction(NextRecv, NR_Unknown, []),
-                            source.ExprFunction(
-                                NextRecv, lc_receive_oracle, [lc_progvar]),
-                        ),
-                    )
-                ),
-            ),
-            lh('10'): conjs(
-                eq(is_endpoint, u64(0)),
-                eq(g(lbadge), T),
-                eq(g(idx), T),
-                eq(htd_assigned(), T),
-                eq(mem_assigned(), T),
-                eq(pms_assigned(), T),
-                eq(lc_assigned(), T),
-                eq(ghost_asserts_assigned(), T),
-                eq(g(lc_progvar), T),
-
-                # required for functional correctness
-                eq(
-                    lbadge,
-                    source.expr_shift_right(
-                        source.ExprFunction(
-                            source.type_word64, lc_unhandled_notified, [lc_progvar]),
-                        source.ExprFunction(source.type_word64, source.FunctionName(
-                            "(_ zero_extend 32)"), [idx])
-                    )
-                ),
-                eq(
-                    source.expr_shift_left(
-                        lbadge,
-                        source.ExprFunction(source.type_word64, source.FunctionName(
-                            "(_ zero_extend 32)"), [idx])
-                    ),
-                    source.ExprFunction(
-                        source.type_word64, lc_unhandled_notified, [lc_progvar]),
-                ),
-                ule(
-                    idx,
-                    u32(63)
-                ),
-                eq(
-                    u64(0),
-                    source.expr_shift_right(
-                        source.ExprFunction(
-                            source.type_word64, lc_unhandled_notified, [lc_progvar]),
-                        i64(63)
-                    )
-                ),
-                eq(
-                    u64(0),
-                    source.expr_shift_right(
-                        lbadge,
-                        u64(63)
-                    )
-                ),
-                eq(
-                    source.ExprFunction(source.type_word64, source.FunctionName("Ch_set_intersection"), [
-                        source.ExprFunction(
-                            source.type_word64, lc_unhandled_notified, [lc_progvar]),
-                        source.ExprFunction(
-                            source.type_word64, lc_last_handled_notified, [lc_progvar])
-                    ]),
-                    source.ExprFunction(
-                        source.type_word64, source.FunctionName("Ch_set_empty"), [])
-                ),
-                eq(
-                    source.ExprFunction(source.type_word64, source.FunctionName("Ch_set_union"), [
-                        source.ExprFunction(
-                            source.type_word64, lc_unhandled_notified, [lc_progvar]),
-                        source.ExprFunction(
-                            source.type_word64, lc_last_handled_notified, [lc_progvar])
-                    ]),
-                    source.ExprFunction(Set_Ch, NextRecvNotificationGet, [source.ExprFunction(
-                        NextRecv, source.FunctionName('handler_loop_pre_receive_oracle'), [])])
-                ),
-                eq(
-                    source.ExprFunction(
-                        Maybe_Prod_Ch_MsgInfo, Prod_Ch_MsgInfo_Nothing, []),
-                    source.ExprFunction(
-                        Maybe_Prod_Ch_MsgInfo, lc_unhandled_ppcall, [lc_progvar]),
-                ),
-                eq(
-                    source.ExprFunction(Maybe_MsgInfo, source.FunctionName(
-                        "handler_loop_pre_unhandled_reply"), []),
-                    source.ExprFunction(
-                        Maybe_MsgInfo, lc_last_handled_reply, [lc_progvar]),
-                ),
-                eq(
-                    source.ExprFunction(NextRecv, NR_Unknown, []),
-                    source.ExprFunction(
-                        NextRecv, lc_receive_oracle, [lc_progvar]),
-                ),
-            ),
-        },
-            precondition=T,
-            postcondition=T)
-    }
-}
-
-
 def wf_handler_pre_unhandled_reply_with_set_ghost() -> source.ExprT[source.ProgVarName]:
     wf_condition = conjs(
         # if Nothing then all other bits are zero
@@ -1131,6 +691,7 @@ def receive_oracle_relation() -> source.ExprT[source.ProgVarName]:
                             Maybe_MsgInfoEnumNothing, [])
     )
 
+    # FIXME: remove this explicit references to DSA incarnations
     have_reply_lvar: source.ExprT[source.ProgVarName] = source.ExprFunction(
         source.TypeBitVec(8), source.FunctionName("have_reply____Bool@v~2"), [])
     rt_assigned_lvar: source.ExprT[source.ProgVarName] = source.ExprFunction(
@@ -1238,3 +799,504 @@ def handler_loop_iter_post() -> source.ExprT[source.ProgVarName]:
             )
         )
     )
+
+
+idx = u32v('idx')
+ch = u32v('ch')
+have_reply = C_boolv('have_reply')
+is_endpoint = u64v('is_endpoint')
+reply_tag = source.ExprVar(source.type_word64, source.ProgVarName(
+    'reply_tag___struct_seL4_MessageInfo_C#v.words_C.0'))
+lbadge = u64v('lbadge')
+
+universe: Mapping[str, Mapping[str, source.Ghost[source.ProgVarName | nip.GuardVarName]]] = {
+    "tests/errors/errors.txt": {
+        "tmp.private_hello": source.Ghost(
+            precondition=eq(arg(i32v('hx')), i32(0)),
+            postcondition=T,
+            loop_invariants={},
+            loop_iterations={},
+        )
+    },
+    "tests/all.txt": {
+        # 3 <= i ==> a = 1
+        # 3:w32 <=s i:w32 ==> a:w32 = 1:w32
+        "tmp.undefined_var_with_loops": source.Ghost(
+            loop_invariants={
+                lh("5"): conj(imp(sle(i32(3), i32v("i")), eq(i32v("a"), i32(1))), sbounded(i32v("i"), i32(0), i32(5)))
+            },
+            precondition=T,
+            postcondition=T,
+            loop_iterations={
+                lh('5'): source.empty_loop_ghost,
+            },
+        ),
+
+        "tmp.multiple_loops___fail_missing_invariant": source.Ghost(
+            loop_invariants={
+                # no need to think, i is always going to be less than 200, and
+                # that's enough to prove no overflows
+                lh('17'): sbounded(i32v('i'), i32(0), i32(200)),
+                lh('4'): sbounded(i32v('i'), i32(0), i32(200)),
+                lh('8'): sbounded(i32v('i'), i32(0), i32(200)),
+            },
+            loop_iterations={
+                lh('17'): source.empty_loop_ghost,
+                lh('4'): source.empty_loop_ghost,
+                lh('8'): source.empty_loop_ghost,
+            },
+            precondition=T,
+            postcondition=T,
+        ),
+
+        "tmp.arith_sum": source.Ghost(
+            loop_invariants={
+                # 0 <= i <= n
+                # s = i * (i - 1) / 2
+                # i#assigned
+                # s#assigned
+                lh('5'): conjs(
+                    sbounded(i32v('i'), i32(0), i32v('n')),
+                    eq(i32v('s'), udiv(mul(i32v('i'), sub(i32v('i'), i32(1))), i32(2))),
+                    g(i32v('i')),
+                    g(i32v('s'))),
+            },
+            precondition=sbounded(arg(i32v('n')), i32(0), i32(100)),
+            postcondition=T,
+            # postcondition=eq(i32ret, udiv(
+            #     mul(arg(i32v('n')), sub(arg(i32v('i')), i32(1))), i32(2))),
+            loop_iterations={lh('5'): source.empty_loop_ghost},
+        ),
+
+        "tmp.multiple_ret_incarnations___fail_missing_invariants": source.Ghost(
+            loop_invariants={lh('5'): T},
+            loop_iterations={lh('5'): source.empty_loop_ghost},
+            precondition=sle(i32(0), arg(i32v('n'))),
+            postcondition=eq(i32ret, udiv(arg(i32v('n')), i32(2))),
+        ),
+
+        "tmp.callee": source.Ghost(
+            loop_invariants={},
+            loop_iterations={},
+            precondition=sle(arg(i32v('a')), i32(100)),
+            postcondition=eq(i32ret, plus(arg(i32v('a')), i32(1)))
+        ),
+
+        "tmp.caller": source.Ghost(
+            loop_invariants={},
+            loop_iterations={},
+            precondition=sbounded(arg(i32v('b')), i32(-100), i32(100)),
+            postcondition=eq(i32ret, mul(plus(arg(i32v('b')), i32(1)), i32(2)))),
+
+        "tmp.caller2": source.Ghost(
+            loop_invariants={},
+            loop_iterations={},
+            precondition=sbounded(arg(i32v('b')), i32(-100), i32(100)),
+            postcondition=eq(i32ret, mul(plus(arg(i32v('b')), i32(1)), mul(plus(arg(i32v('b')), i32(1)), i32(2))))),
+
+        "tmp.caller2___fails_wrong_post_condition": source.Ghost(
+            loop_invariants={},
+            loop_iterations={},
+            precondition=sbounded(arg(i32v('b')), i32(-100), i32(100)),
+            postcondition=eq(i32ret, i32(0))),
+
+        "tmp.caller3": source.Ghost(
+            loop_invariants={},
+            loop_iterations={},
+            precondition=sbounded(arg(i32v('b')), i32(-100), i32(100)),
+            postcondition=eq(i32ret, i32(0))),
+
+        "tmp.f_many_args": source.Ghost(
+            loop_invariants={},
+            loop_iterations={},
+            precondition=conjs(
+                sbounded(arg(i32v('b')), i32(-100), i32(100)),
+                sbounded(arg(i32v('c')), i32(-100), i32(100))
+            ),
+            postcondition=conjs(
+                imp(slt(i32(0), arg(i32v('a'))), eq(
+                    i32ret, mul(plus(arg(i32v('b')), i32(1)), i32(2)))),
+                imp(neg(slt(i32(0), arg(i32v('a')))), eq(
+                    i32ret, mul(sub(arg(i32v('c')), i32(1)), i32(2)))),
+            ),
+        ),
+
+        "tmp.call_many_args": source.Ghost(
+            loop_invariants={},
+            loop_iterations={},
+            precondition=sbounded(arg(i32v('flag')), i32(-10), i32(10)),
+            postcondition=conjs(
+                # imp(slt(i32(0), arg(i32v('flag'))), eq(i32ret, plus(
+                #     i32(4), mul(plus(arg(i32v('flag')), i32(1)), i32(2))))),
+                # imp(neg(slt(i32(0), arg(i32v('flag')))), eq(i32ret, plus(
+                #     i32(2), mul(sub(arg(i32v('flag')), i32(1)), i32(2))))),
+                T,
+                imp(eq(arg(i32v('flag')), i32(0)),
+                    eq(i32ret, i32(0))),
+
+            ),
+        ),
+
+        "tmp.call_many_args_once": source.Ghost(
+            loop_invariants={},
+            loop_iterations={},
+            precondition=conjs(sbounded(arg(i32v('x')), i32(-10), i32(10)),
+                               sbounded(arg(i32v('y')), i32(-10), i32(10))),
+            postcondition=eq(i32ret, mul(sub(arg(i32v('y')), i32(1)), i32(2))),
+        ),
+
+        "tmp.ghost_add_1__fail": source.Ghost(loop_invariants={},
+                                              loop_iterations={},
+                                              precondition=T,
+                                              postcondition=eq(testghost, plus(arg(testghost), i32(1)))),
+
+        "tmp.ghost_add_3": source.Ghost(loop_invariants={},
+                                        loop_iterations={},
+                                        precondition=T,
+                                        postcondition=eq(testghost, plus(arg(testghost), i32(3)))),
+        "tmp.ghost_add_2__fail": source.Ghost(loop_invariants={},
+                                              loop_iterations={},
+                                              precondition=T,
+                                              postcondition=eq(testghost, plus(arg(testghost), i32(2)))),
+
+        "tmp.special_call__fail": source.Ghost(loop_invariants={},
+                                               loop_iterations={},
+                                               precondition=slt(
+                                                   plus(arg(testghost), arg(i32v('i'))), i32(255)),
+                                               postcondition=eq(testghost, i32(0))),
+
+        "tmp.loop_iteration_condition": source.Ghost(
+            loop_invariants={
+                lh('3'): conjs(g(testghost),
+                               g(i32v('i')),
+                               g('Mem'),
+                               g('PMS'),
+                               g('HTD'),
+                               g('GhostAssertions'),
+                               sbounded(i32v('i'), i32(0), i32(10))),
+            },
+            loop_iterations={
+                lh('3'): source.LoopIterationGhost(
+                    pre_iter=sbounded(testghost, i32(0), i32(127)),
+                    post_iter=eq(testghost, i32(0)),
+                )
+            },
+            precondition=T,
+            postcondition=T),
+
+        "tmp.concrete_ghost_interaction": source.Ghost(
+            loop_invariants={
+                lh('3'): conjs(g(i32v('i')),
+                               g(i32v('n')),
+                               g('GhostAssertions'),
+                               g('Mem'),
+                               g(testghost),
+                               g('PMS'),
+                               g('HTD'),
+                               sbounded(i32v('i'), i32(0), i32v('n')),
+                               eq(testghost, plus(arg(testghost), i32v('i')))
+                               )
+            },
+            loop_iterations={lh('3'): source.empty_loop_ghost},
+            precondition=sbounded(arg(i32v('n')), i32(0), i32(10)),
+            postcondition=eq(testghost, plus(arg(testghost), arg(i32v('n'))))),
+
+        "tmp.concrete_ghost_interaction__fail": source.Ghost(
+            loop_invariants={
+                lh('3'): conjs(g(i32v('i')),
+                               g(i32v('n')),
+                               g('GhostAssertions'),
+                               g('Mem'),
+                               g(testghost),
+                               g('PMS'),
+                               g('HTD'),
+                               sbounded(i32v('i'), i32(0), i32v('n')),
+                               eq(testghost, plus(arg(testghost), i32v('i')))
+                               )
+            },
+            loop_iterations={lh('3'): source.empty_loop_ghost},
+            precondition=sbounded(arg(i32v('n')), i32(0), i32(10)),
+            postcondition=eq(testghost, plus(arg(testghost), plus(arg(i32v('n')), i32(1)))))
+        # the +1 breaks everything here
+    },
+    "tests/libsel4cp_trunc.txt": {
+        "libsel4cp.protected": source.Ghost(
+            precondition=conjs(
+                eq(source.ExprFunction(Maybe_Prod_Ch_MsgInfo, lc_unhandled_ppcall, (arg(lc_progvar), )),
+                   source.ExprFunction(Maybe_Prod_Ch_MsgInfo, Maybe_Prod_Ch_MsgInfo_Just, [
+                       source.ExprFunction(Prod_Ch_MsgInfo, Prod_Ch_MsgInfo_fn, (
+                           source.ExprFunction(
+                               Ch, C_channel_to_SMT_channel, (arg(ch), )),
+                           source.ExprFunction(
+                               MsgInfo, C_msg_info_to_SMT_msg_info, (arg(msginfo), )),
+                       ))
+                   ])),
+                source.ExprFunction(
+                    source.type_bool, C_channel_valid, (arg(ch), )),
+            ),
+            postcondition=protected_postcondition(arg(lc_progvar), lc_progvar),
+            loop_invariants={},
+            loop_iterations={},
+        ),
+        "libsel4cp.notified": source.Ghost(
+            precondition=conjs(
+                source.ExprFunction(source.type_bool, Ch_set_has, (
+                    source.ExprFunction(
+                        Set_Ch, lc_unhandled_notified, (arg(lc_progvar), )),
+                    source.ExprFunction(
+                        Ch, C_channel_to_SMT_channel, (arg(ch), )),
+                )),
+                source.ExprFunction(
+                    source.type_bool, C_channel_valid, (arg(ch), )),
+            ),
+            postcondition=notified_postcondition(arg(lc_progvar), lc_progvar),
+            loop_invariants={},
+            loop_iterations={},
+        ),
+        "libsel4cp.seL4_Recv": source.Ghost(
+            precondition=conjs(
+                neq(source.ExprFunction(NextRecv, lc_receive_oracle, (arg(lc_progvar),)),
+                    source.ExprFunction(NextRecv, NR_Unknown, ())),
+                neq(source.ExprFunction(NextRecv, lc_receive_oracle, (arg(lc_progvar),)),
+                    source.ExprFunction(NextRecv, NR_Notification, (Ch_empty_fn,))),
+                eq(source.ExprFunction(Set_Ch, lc_unhandled_notified, (arg(lc_progvar),)),
+                   Ch_empty_fn),
+                eq(source.ExprFunction(Maybe_Prod_Ch_MsgInfo, lc_unhandled_ppcall, (arg(lc_progvar),)),
+                   source.ExprFunction(Maybe_Prod_Ch_MsgInfo, Prod_Ch_MsgInfo_Nothing, [])),
+                eq(source.ExprFunction(Maybe_MsgInfo, lc_unhandled_reply, (arg(lc_progvar),)),
+                   source.ExprFunction(Maybe_MsgInfo, MsgInfo_Nothing, [])),
+            ),
+            postcondition=recv_postcondition(
+                arg(lc_progvar), lc_progvar, msg_info_ret),
+            loop_invariants={},
+            loop_iterations={},
+        ),
+        "libsel4cp.seL4_ReplyRecv": source.Ghost(
+            precondition=conjs(
+                neg(eq(source.ExprFunction(NextRecv, lc_receive_oracle, (arg(lc_progvar),)),
+                       source.ExprFunction(NextRecv, NR_Unknown, []))),
+                neg(eq(source.ExprFunction(NextRecv, lc_receive_oracle, (arg(lc_progvar),)),
+                       source.ExprFunction(NextRecv, NR_Notification, (Ch_empty_fn,)))),
+                eq(source.ExprFunction(Set_Ch, lc_unhandled_notified, (arg(lc_progvar),)),
+                   Ch_empty_fn),
+                eq(source.ExprFunction(Maybe_Prod_Ch_MsgInfo, lc_unhandled_ppcall, (arg(lc_progvar),)),
+                   source.ExprFunction(Maybe_Prod_Ch_MsgInfo, Prod_Ch_MsgInfo_Nothing, [])),
+                neg(eq(source.ExprFunction(Maybe_MsgInfo, lc_unhandled_reply, (arg(lc_progvar),)),
+                       source.ExprFunction(Maybe_MsgInfo, MsgInfo_Nothing, []))),
+            ),
+            postcondition=replyrecv_postcondition(
+                arg(lc_progvar), lc_progvar, msg_info_ret),
+            loop_invariants={},
+            loop_iterations={},
+        ),
+        "libsel4cp.handler_loop": source.Ghost(
+            loop_invariants={
+                lh(handler_loop_node_name()): conjs(
+                    source.expr_implies(
+                        neq(have_reply, char(0)),
+                        eq(g(reply_tag), T),
+                    ),
+                    source.expr_implies(
+                        eq(g(is_endpoint), T),
+                        eq(
+                            neq(is_endpoint, u64(0)),
+                            neq(have_reply,
+                                char(0))
+                        )
+                    ),
+                    eq(htd_assigned(), T),
+                    eq(mem_assigned(), T),
+                    eq(pms_assigned(), T),
+                    eq(lc_assigned(), T),
+                    eq(ghost_asserts_assigned(), T),
+                    eq(g(have_reply), T),
+                    eq(g(lc_progvar), T),
+
+                    source.expr_implies(
+                        conjs(eq(g(lbadge), T), eq(lbadge, i64(0))),
+                        conjs(
+                            eq(is_endpoint, i64(0)),
+                            eq(g(lbadge), T),
+                            eq(g(idx), T),
+                            eq(htd_assigned(), T),
+                            eq(mem_assigned(), T),
+                            eq(pms_assigned(), T),
+                            eq(lc_assigned(), T),
+                            eq(ghost_asserts_assigned(), T),
+                            # required for verification (loop 10 exit conds):
+                            eq(
+                                lbadge,
+                                source.expr_shift_right(
+                                    source.ExprFunction(
+                                        source.type_word64, lc_unhandled_notified, [lc_progvar]),
+                                    source.ExprFunction(source.type_word64, source.FunctionName(
+                                        "(_ zero_extend 32)"), [idx])
+                                )
+                            ),
+                            eq(
+                                source.expr_shift_left(
+                                    lbadge,
+                                    source.ExprFunction(source.type_word64, source.FunctionName(
+                                        "(_ zero_extend 32)"), [idx])
+                                ),
+                                source.ExprFunction(
+                                    source.type_word64, lc_unhandled_notified, [lc_progvar]),
+                            ),
+                            ule(
+                                idx,
+                                u32(63)
+                            ),
+                            eq(
+                                i64(0),
+                                source.expr_shift_right(
+                                    source.ExprFunction(
+                                        source.type_word64, lc_unhandled_notified, [lc_progvar]),
+                                    i64(63)
+                                )
+                            ),
+                            eq(
+                                i64(0),
+                                source.expr_shift_right(
+                                    lbadge,
+                                    i64(63)
+                                )
+                            ),
+                            eq(
+                                source.ExprFunction(source.type_word64, source.FunctionName("Ch_set_intersection"), [
+                                    source.ExprFunction(
+                                        source.type_word64, lc_unhandled_notified, [lc_progvar]),
+                                    source.ExprFunction(
+                                        source.type_word64, lc_last_handled_notified, [lc_progvar])
+                                ]),
+                                source.ExprFunction(
+                                    source.type_word64, source.FunctionName("Ch_set_empty"), [])
+                            ),
+                            eq(
+                                source.ExprFunction(source.type_word64, source.FunctionName("Ch_set_union"), [
+                                    source.ExprFunction(
+                                        source.type_word64, lc_unhandled_notified, [lc_progvar]),
+                                    source.ExprFunction(
+                                        source.type_word64, lc_last_handled_notified, [lc_progvar])
+                                ]),
+                                source.ExprFunction(Set_Ch, NextRecvNotificationGet, [source.ExprFunction(
+                                    NextRecv, source.FunctionName('handler_loop_pre_receive_oracle'), [])])
+                            ),
+                            eq(
+                                source.ExprFunction(
+                                    Maybe_Prod_Ch_MsgInfo, Prod_Ch_MsgInfo_Nothing, []),
+                                source.ExprFunction(
+                                    Maybe_Prod_Ch_MsgInfo, lc_unhandled_ppcall, [lc_progvar]),
+                            ),
+                            eq(
+                                source.ExprFunction(Maybe_MsgInfo, source.FunctionName(
+                                    "handler_loop_pre_unhandled_reply"), []),
+                                source.ExprFunction(
+                                    Maybe_MsgInfo, lc_last_handled_reply, [lc_progvar]),
+                            ),
+                            eq(
+                                source.ExprFunction(NextRecv, NR_Unknown, []),
+                                source.ExprFunction(
+                                    NextRecv, lc_receive_oracle, [lc_progvar]),
+                            ),
+                        )
+                    ),
+                ),
+                lh('10'): conjs(
+                    eq(is_endpoint, u64(0)),
+                    eq(g(lbadge), T),
+                    eq(g(idx), T),
+                    eq(htd_assigned(), T),
+                    eq(mem_assigned(), T),
+                    eq(pms_assigned(), T),
+                    eq(lc_assigned(), T),
+                    eq(ghost_asserts_assigned(), T),
+                    eq(g(lc_progvar), T),
+
+                    # required for functional correctness
+                    eq(
+                        lbadge,
+                        source.expr_shift_right(
+                            source.ExprFunction(
+                                source.type_word64, lc_unhandled_notified, [lc_progvar]),
+                            source.ExprFunction(source.type_word64, source.FunctionName(
+                                "(_ zero_extend 32)"), [idx])
+                        )
+                    ),
+                    eq(
+                        source.expr_shift_left(
+                            lbadge,
+                            source.ExprFunction(source.type_word64, source.FunctionName(
+                                "(_ zero_extend 32)"), [idx])
+                        ),
+                        source.ExprFunction(
+                            source.type_word64, lc_unhandled_notified, [lc_progvar]),
+                    ),
+                    ule(
+                        idx,
+                        u32(63)
+                    ),
+                    eq(
+                        u64(0),
+                        source.expr_shift_right(
+                            source.ExprFunction(
+                                source.type_word64, lc_unhandled_notified, [lc_progvar]),
+                            i64(63)
+                        )
+                    ),
+                    eq(
+                        u64(0),
+                        source.expr_shift_right(
+                            lbadge,
+                            u64(63)
+                        )
+                    ),
+                    eq(
+                        source.ExprFunction(source.type_word64, source.FunctionName("Ch_set_intersection"), [
+                            source.ExprFunction(
+                                source.type_word64, lc_unhandled_notified, [lc_progvar]),
+                            source.ExprFunction(
+                                source.type_word64, lc_last_handled_notified, [lc_progvar])
+                        ]),
+                        source.ExprFunction(
+                            source.type_word64, source.FunctionName("Ch_set_empty"), [])
+                    ),
+                    eq(
+                        source.ExprFunction(source.type_word64, source.FunctionName("Ch_set_union"), [
+                            source.ExprFunction(
+                                source.type_word64, lc_unhandled_notified, [lc_progvar]),
+                            source.ExprFunction(
+                                source.type_word64, lc_last_handled_notified, [lc_progvar])
+                        ]),
+                        source.ExprFunction(Set_Ch, NextRecvNotificationGet, [source.ExprFunction(
+                            NextRecv, source.FunctionName('handler_loop_pre_receive_oracle'), [])])
+                    ),
+                    eq(
+                        source.ExprFunction(
+                            Maybe_Prod_Ch_MsgInfo, Prod_Ch_MsgInfo_Nothing, []),
+                        source.ExprFunction(
+                            Maybe_Prod_Ch_MsgInfo, lc_unhandled_ppcall, [lc_progvar]),
+                    ),
+                    eq(
+                        source.ExprFunction(Maybe_MsgInfo, source.FunctionName(
+                            "handler_loop_pre_unhandled_reply"), []),
+                        source.ExprFunction(
+                            Maybe_MsgInfo, lc_last_handled_reply, [lc_progvar]),
+                    ),
+                    eq(
+                        source.ExprFunction(NextRecv, NR_Unknown, []),
+                        source.ExprFunction(
+                            NextRecv, lc_receive_oracle, [lc_progvar]),
+                    ),
+                ),
+            },
+            loop_iterations={
+                lh(handler_loop_node_name()): source.LoopIterationGhost(
+                    pre_iter=handler_loop_iter_pre(),
+                    post_iter=handler_loop_iter_post(),
+                ),
+                lh('10'): source.empty_loop_ghost,
+            },
+            precondition=T,
+            postcondition=T)
+    }
+}

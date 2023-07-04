@@ -44,7 +44,7 @@ lc_type = {
 }
 
 
-def print_local_context(num: int):
+def print_local_context(num: int) -> None:
     top = sum(t.bit_size for t in lc_type.values()) - 1
 
     for name, field_typ in lc_type.items():

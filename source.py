@@ -776,7 +776,6 @@ class NodeAssume(ABCNode[VarNameKind]):
     succ: NodeName
 
 
-# TODO: no one uses this, get rid of it
 @dataclass(frozen=True)
 class NodeAssert(ABCNode[VarNameKind]):
     expr: ExprT[VarNameKind]
@@ -866,8 +865,32 @@ class GhostlessFunction(Generic[VarNameKind, VarNameKind2]):
             return LoopHeaderName(node_name)
         return None
 
-    def is_loop_latch(self, node_name: NodeName) -> bool:
-        """ A loop latch is a node which jumps (not necessarily back) to the loop header (LLVM terminology) """
+    def is_loop_latch(self, node_name: NodeName) -> LoopHeaderName | None:
+        """ A loop latch is a node which jumps *back* to the loop header (LLVM terminology)
+
+              n1
+              |
+              v
+        n5 <- n2 <---|
+              |      |
+              v      |
+              n3 --> n4
+
+        n1: entry
+        n2: loop header
+        n3: normal node
+        n4: latch
+        n5: loop exit
+        """
+        for succ in self.cfg.all_succs[node_name]:
+            lh = self.is_loop_header(succ)
+            if lh and node_name in self.loops[lh].nodes:
+                assert (node_name, succ) in self.cfg.back_edges
+                return lh
+
+        return None
+
+    def is_loop_latch_or_loop_entry(self, node_name: NodeName) -> bool:
         return any(self.is_loop_header(succ) is not None for succ in self.cfg.all_succs[node_name])
 
     def acyclic_preds_of(self, node_name: NodeName) -> Iterator[NodeName]:
@@ -932,18 +955,44 @@ class GhostlessFunction(Generic[VarNameKind, VarNameKind2]):
         if ghost is None:
             ghost = Ghost(precondition=expr_true,
                           postcondition=expr_true,
-                          loop_invariants={
-                              lh: expr_true for lh in self.loops.keys()},
+                          loop_invariants={lh: expr_true for lh in self.loops},
+                          loop_iterations={
+                              lh: empty_loop_ghost for lh in self.loops},
                           )
         assert self.loops.keys() == ghost.loop_invariants.keys(), "loop invariants don't match"
         return GenericFunction(name=self.name, variables=self.variables, nodes=self.nodes, loops=self.loops, signature=self.signature, cfg=self.cfg, ghost=ghost)
 
 
 @dataclass(frozen=True)
+class LoopIterationGhost(Generic[VarNameKind]):
+    pre_iter: ExprT[VarNameKind]
+    """ This is pre_iter is dangerous. It is assumed, but never proved within
+        this tool. So using false as a pre_iter for example will mean the loop
+        will always verify, even when it shouldn't.
+
+        We use them to implement oracles. Those oracles will be connected to
+        the rest of the proofs, but _outside_ of this tool.
+
+        This is why loop iteration conditions are packaged with loop
+        invariants. Most code won't and shouldn't use them.
+    """
+
+    post_iter: ExprT[VarNameKind]
+
+
+empty_loop_ghost: LoopIterationGhost[Any] = LoopIterationGhost(
+    expr_true, expr_true)
+
+
+@dataclass(frozen=True)
 class Ghost(Generic[VarNameKind]):
+    # TODO: ensure on construction that loop invariants and loop iterations
+    # have the same keys
+
     precondition: ExprT[VarNameKind]
     postcondition: ExprT[VarNameKind]
     loop_invariants: Mapping[LoopHeaderName, ExprT[VarNameKind]]
+    loop_iterations: Mapping[LoopHeaderName, LoopIterationGhost[VarNameKind]]
 
 
 @dataclass(frozen=True)

@@ -542,3 +542,14 @@ void concrete_ghost_interaction__fail(int n)
     }
     return;
 }
+
+// all the intersting things are happening in the specification of those
+// functions
+void special_call__fail(int i, int a) {}
+void loop_iteration_condition(int a)
+{
+    for (int i = 0; i < 10; i++)
+    {
+        special_call__fail(i, a);
+    }
+}

@@ -1,3 +1,9 @@
+"""
+This code is buggy.
+
+It doesn't need to be correct for the tool to produce sound proofs.
+"""
+
 import sys
 import dsa
 from dsa import DSANode, DSAExprT
@@ -137,9 +143,9 @@ def determine_reason(node: DSANode) -> FailureReason:
         assert False, "didn't expect to see call stashing as being the failure reason"
     elif node.origin == Provenance.CALL_STASH_INITIAL_ARGS:
         assert False, "didn't expect to see initial call stashing as being the failure reason"
-    elif node.origin == Provenance.HANDLER_LOOP_ITER_PRE:
-        assert False, "didn't expect to see handler loop iter precondition assumption causing any problems"
-    elif node.origin == Provenance.HANDLER_LOOP_ITER_POST:
+    elif node.origin == Provenance.LOOP_ITER_PRE:
+        assert False, "didn't expect to see loop iter precondition assumption causing any problems"
+    elif node.origin == Provenance.LOOP_ITER_POST:
         return FailureReason.UnknownFailure
     else:
         assert False, "unreachable"
@@ -263,7 +269,7 @@ def extract_and_print_why(func: dsa.Function, reason: FailureReason, node: DSANo
         succ_node = func.nodes[succ_node_name]
         assert isinstance(succ_node, source.NodeCall)
         eprint(
-            f"call to function {succ_node.fname} did not satisfy it's preconditions")
+            f"precondition of function {succ_node.fname} could not be established at node {node_name}")
         return succ_node_name
     elif reason == FailureReason.FnPostCondFailure:
         assert isinstance(node, ghost_code.NodePostConditionProofObligation)
@@ -458,13 +464,16 @@ def debug_func_smt(func: dsa.Function, prelude_files: Sequence[str]) -> Tuple[Fa
         # 1 means NodeCond with Error only or a normal node
         # 2 NodeCond going to non {Error, Ret, backedge} - This should never happen
 
+        # this is buggy
+
         # assert these correctness conditions here, then we can assume then in the rest of the codebase.
         if len(successors) == 0:
-            assert func.is_loop_latch(
+            # this doesn't have to be true. The node could just be the post
+            # condition node.
+            assert func.is_loop_latch_or_loop_entry(
                 node_name), "expected a loop latch since all backedges and Err nodes are trimmed"
-            assert isinstance(
-                node, source.NodeCond), "when len(successors) == 0, expected a loop latch"
-            assert node.succ_else == source.NodeNameErr, "expected the else statement to lead to an Err node"
+            assert (isinstance(node, source.NodeCond) and node.succ_else == source.NodeNameErr) \
+                or isinstance(node, source.NodeAssert), "when len(successors) == 0, expected a loop latch"
         elif len(successors) == 1:
             if isinstance(node, source.NodeCond):
                 assert node.succ_else == source.NodeNameErr, "expected Err when len(successors) == 1 and NodeCond"
@@ -472,7 +481,7 @@ def debug_func_smt(func: dsa.Function, prelude_files: Sequence[str]) -> Tuple[Fa
             # only nodecond can have 2 succs
             assert isinstance(node, source.NodeCond)
             # no possible way for this to be a loop latch since these nodes are trimmed
-            assert not func.is_loop_latch(
+            assert not func.is_loop_latch_or_loop_entry(
                 node_name), "loop latch with two successors are not handled - no need to worry, should be a simple fix"
 
         else:
@@ -486,7 +495,7 @@ def debug_func_smt(func: dsa.Function, prelude_files: Sequence[str]) -> Tuple[Fa
             # sanity check for loop latch, this is not needed
             # but we do it anyway to detect any errors in the logic used in error reporting.
             if len(successors) == 0:
-                assert func.is_loop_latch(
+                assert func.is_loop_latch_or_loop_entry(
                     node_name), "successors were trimmed but not a loop latch - this is not expected"
                 # Not needed really but let's just check if successors_sat is UNSAT when we introduce the backedge.
                 # Why are we checking for UNSAT here instead of SAT ?

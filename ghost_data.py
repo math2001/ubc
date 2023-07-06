@@ -555,8 +555,7 @@ def wf_handler_pre_unhandled_reply_with_set_ghost() -> source.ExprT[source.ProgV
                     source.ExprNum(Maybe_MsgInfo, 0)
                 ),
                 eq(
-                    source.ExprFunction(source.TypeBitVec(
-                        8), source.FunctionName("have_reply____Bool@v~2"), []),
+                    have_reply,
                     source.ExprNum(source.type_word8, 0)
                 )
             )
@@ -564,8 +563,7 @@ def wf_handler_pre_unhandled_reply_with_set_ghost() -> source.ExprT[source.ProgV
         # if no have_reply then no unhandled_reply either
         source.expr_implies(
             eq(
-                source.ExprFunction(source.TypeBitVec(
-                    8), source.FunctionName("have_reply____Bool@v~2"), []),
+                have_reply,
                 source.ExprNum(source.type_word8, 0)
             ),
             eq(
@@ -691,11 +689,8 @@ def receive_oracle_relation() -> source.ExprT[source.ProgVarName]:
                             Maybe_MsgInfoEnumNothing, [])
     )
 
-    # FIXME: remove this explicit references to DSA incarnations
-    have_reply_lvar: source.ExprT[source.ProgVarName] = source.ExprFunction(
-        source.TypeBitVec(8), source.FunctionName("have_reply____Bool@v~2"), [])
-    rt_assigned_lvar: source.ExprT[source.ProgVarName] = source.ExprFunction(
-        source.type_bool, source.FunctionName("reply_tag___struct_seL4_MessageInfo_C@v.words_C.0@assigned~2"), [])
+    have_reply_lvar = C_boolv("have_reply")
+    rt_assigned_lvar = g(reply_tag)
 
     no_reply_pending_kernel = conjs(
         eq(have_reply_lvar, char(0)),

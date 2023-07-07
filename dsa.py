@@ -174,7 +174,9 @@ def get_next_dsa_var_incarnation_number_from_context(s: DSABuilder, context: Map
     return IncarnationBase
 
 
-def apply_insertions(func: ghost_code.Function, s: DSABuilder, new_vars: Set[source.ExprVarT[Incarnation[source.ProgVarName | nip.GuardVarName]]]) -> None:
+def apply_insertions(
+        s: DSABuilder,
+        new_vars: Set[source.ExprVarT[Incarnation[source.ProgVarName | nip.GuardVarName]]]) -> None:
     j = 0
     for node_name, node_insertions in s.insertions.items():
         for pred_name in s.original_func.acyclic_preds_of(node_name):
@@ -191,7 +193,7 @@ def apply_insertions(func: ghost_code.Function, s: DSABuilder, new_vars: Set[sou
 
                 old_incarnation_number = s.incarnations[pred_name][prog_var]
 
-                updates.append(source.Update(make_dsa_var(func.variables, new_vars, prog_var, new_incarnation_number),
+                updates.append(source.Update(make_dsa_var(s.original_func.variables, new_vars, prog_var, new_incarnation_number),
                                              source.ExprVar(prog_var.typ, name=Incarnation(prog_var.name, old_incarnation_number))))
             if len(updates) == 0:
                 continue
@@ -278,8 +280,8 @@ def dsa(func: ghost_code.Function) -> Function:
     # at the end, apply the insertions
     # recompute cfg
 
-    new_dsa_vars: Set[source.ExprVarT[Incarnation[source.ProgVarName | nip.GuardVarName]]] = set([
-    ])
+    new_dsa_vars: Set[source.ExprVarT[Incarnation[source.ProgVarName |
+                                                  nip.GuardVarName]]] = set()
 
     s = DSABuilder(original_func=func, insertions={},
                    dsa_nodes={}, incarnations={})
@@ -464,7 +466,7 @@ def dsa(func: ghost_code.Function) -> Function:
             curr_node_incarnations[prog_var] = incarnation_number
         s.incarnations[current_node] = curr_node_incarnations
 
-    apply_insertions(func, s, new_dsa_vars)
+    apply_insertions(s, new_dsa_vars)
 
     # need to recompute the cfg from dsa_nodes
     all_succs = abc_cfg.compute_all_successors_from_nodes(s.dsa_nodes)

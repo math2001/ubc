@@ -186,7 +186,7 @@ def run(filename: str, function_names: Collection[str], options: Collection[Cmdl
             else:
                 print(smtlib)
 
-        sats = tuple(smt.send_smtlib(smtlib, smt.SolverCVC5()))
+        sats = tuple(smt.send_smtlib(smtlib, smt.Solver.CVC5))
         if CmdlineOption.SHOW_SATS in options:
             print(sats)
         assert len(sats) == 2

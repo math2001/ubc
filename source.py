@@ -1140,11 +1140,11 @@ def convert_function_metadata(func: syntax.Function) -> FunctionSignature[ProgVa
 
 
 def get_function_variables(func: GhostlessFunction[ProgVarName, Any], nodes: Mapping[NodeName, Node[ProgVarName]]) -> Set[ExprVarT[ProgVarName]]:
-    s: Set[ExprVarT[ProgVarName]] = set([])
+    s: Set[ExprVarT[ProgVarName]] = set()
     for node_name, node in nodes.items():
-        s = s | used_variables_in_node(node)
-        s = s | assigned_variables_in_node(
-            func, node_name, with_loop_targets=True)
+        s.update(used_variables_in_node(node))
+        s.update(assigned_variables_in_node(
+            func, node_name, with_loop_targets=True))
     return s
 
 
@@ -1165,17 +1165,17 @@ def convert_function(func: syntax.Function) -> GhostlessFunction[ProgVarName, An
 
     # Insert all variables here
     variables = get_function_variables(tmpfn, safe_nodes)
-    variables = variables | {ExprVar(type_mem, ProgVarName('Mem'))}
-    variables = variables | {ExprVar(type_htd, ProgVarName('HTD'))}
-    variables = variables | {ExprVar(type_pms, ProgVarName('PMS'))}
-    variables = variables | {
-        ExprVar(type_ghost, ProgVarName('GhostAssertions'))}
+    variables.add(ExprVar(type_mem, ProgVarName('Mem')))
+    variables.add(ExprVar(type_htd, ProgVarName('HTD')))
+    variables.add(ExprVar(type_pms, ProgVarName('PMS')))
+    variables.add(
+        ExprVar(type_ghost, ProgVarName('GhostAssertions')))
 
-    variables = variables | set(metadata.returns)
-    variables = variables | set(metadata.parameters)
+    variables.update(metadata.returns)
+    variables.update(metadata.parameters)
 
     for spec_gh_var in spec_ghosts:
         spec_var = mk_spec_ghost_var(spec_gh_var)
-        variables = variables | {spec_var}
+        variables.add(spec_var)
 
     return GhostlessFunction(cfg=cfg, variables=variables, nodes=safe_nodes, loops=loops, signature=metadata, name=func.name)

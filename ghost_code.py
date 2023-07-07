@@ -204,8 +204,6 @@ def sprinkle_subject_pre_and_post_conditions(func: nip.Function, new_variables: 
         stash_updates = stash_updates + (source.Update(var, param),)
 
     # a1/subject-arg = a1; a2/subject-arg = a2, ... (for all arguments)
-    # stash_updates = tuple(source.Update(source.ExprVar(param.typ, SubjectArgVarName(param.name + '/subject-arg')), param)
-    #                       for param in func.signature.parameters)
 
     yield Insertion(after=func.cfg.entry,
                     before=entry_node.succ,
@@ -315,14 +313,15 @@ def sprinkle_function_call_pre_and_post_condition(func: nip.Function,
     # (you define the parameters, you make the arguments)
     params = signatures[node.fname].parameters
     assert len(node.args) == len(params)
-    call_stash_updates: Tuple[source.Update[source.ProgVarName |
-                                            nip.GuardVarName], ...] = ()
+    _call_stash_updates: list[source.Update[source.ProgVarName |
+                                            nip.GuardVarName]] = []
     for param, arg in zip(params, node.args):
         exprVar = source.ExprVar(
             param.typ, CallArgVarName(param.name + "/call-arg"))
         new_variables.add(exprVar)
-        call_stash_updates = call_stash_updates + \
-            (source.Update(exprVar, arg),)
+        _call_stash_updates.append(source.Update(exprVar, arg))
+
+    call_stash_updates = tuple(_call_stash_updates)
 
     def f(var: source.ExprVarT[source.ProgVarName | nip.GuardVarName]) -> source.ExprVarT[source.ProgVarName | nip.GuardVarName]:
         # this will change with the new way of writing specs

@@ -463,9 +463,6 @@ def parse_cmd_comment() -> pc.Parser[smt.CmdComment]:
 
 
 def parse_model_response() -> pc.Parser[smt.ModelResponse]:
-    # Coz apparently specifications are just based on vibes
-    # you don't need to adhere to them apparently.
-    # Fuck this
     return pc.choice([parse_cmd_define_fun(), parse_cmd_define_fun_partial(), parse_cmd_declare_fun(), parse_forall(), parse_cmd_comment()])
 
 

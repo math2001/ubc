@@ -476,7 +476,7 @@ def make_smtlib(p: assume_prove.AssumeProveProg, prelude_files: Sequence[str] = 
 
     # ignore node_ok like variables
     # only use variables that can be traced back to the C code & spec.
-    expr_variables = set([])
+    expr_variables = set()
 
     # emit all arguments
     for arg in p.arguments:
@@ -495,12 +495,6 @@ def make_smtlib(p: assume_prove.AssumeProveProg, prelude_files: Sequence[str] = 
                     emited_identifiers.add(iden)
                     emited_variables.add(var.name)
                     expr_variables.add(var.name)
-
-    # setvars = set([v.name for v in p.variables])
-    # if expr_variables != setvars:
-    #     print("DIFF: ", expr_variables - setvars)
-
-    # assert expr_variables == setvars
 
     cmds.append(EmptyLine)
 
@@ -548,27 +542,21 @@ class CheckSatResult(Enum):
     SAT = 'sat'
 
 
-class SolverZ3(NamedTuple):
-    pass
+class Solver(Enum):
+    Z3 = 'z3'
+    CVC5 = 'cvc5'
 
 
-class SolverCVC5(NamedTuple):
-    pass
-
-
-SolverType = SolverZ3 | SolverCVC5
-
-
-def get_subprocess_file(solver_type: SolverType, filepath: str) -> Sequence[str]:
-    if isinstance(solver_type, SolverZ3):
+def get_subprocess_file(solver: Solver, filepath: str) -> Sequence[str]:
+    if solver is Solver.Z3:
         return ["z3", "-file:"+filepath]
-    elif isinstance(solver_type, SolverCVC5):
+    elif solver is Solver.CVC5:
         return ["cvc5", "--incremental", "--produce-models", filepath]
     else:
-        assert_never(solver_type)
+        assert_never(solver)
 
 
-def send_smtlib(smtlib: SMTLIB, solver_type: SolverType) -> Iterator[CheckSatResult]:
+def send_smtlib(smtlib: SMTLIB, solver: Solver) -> Iterator[CheckSatResult]:
     """Send command to any smt solver and returns a boolean per (check-sat)
     """
 
@@ -576,7 +564,7 @@ def send_smtlib(smtlib: SMTLIB, solver_type: SolverType) -> Iterator[CheckSatRes
         f.write(smtlib)
         f.close()
         p = subprocess.Popen(get_subprocess_file(
-            solver_type, fullpath), stderr=subprocess.PIPE, stdout=subprocess.PIPE)
+            solver, fullpath), stderr=subprocess.PIPE, stdout=subprocess.PIPE)
         p.wait()
     assert p.stderr is not None
     assert p.stdout is not None

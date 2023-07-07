@@ -286,7 +286,7 @@ def get_sat(smtlib: smt.SMTLIB) -> Tuple[bool, smt.CheckSatResult]:
     another indicating if the statements resulted in a program being unsat (verified) or sat. 
     This structure is given by how smt.make_smtlib is defined.
     """
-    results = tuple(smt.send_smtlib(smtlib, smt.SolverZ3()))
+    results = tuple(smt.send_smtlib(smtlib, smt.Solver.Z3))
     sz = len(results)
     assert sz >= 2
     for i in range(0, sz-1):
@@ -314,7 +314,7 @@ def pretty_node(node: source.Node[source.VarNameKind]) -> str:
         assert_never(node)
 
 
-def send_smtlib_model(smtlib: smt.SMTLIB, solver_type: smt.SolverType) -> smt.Responses:
+def send_smtlib_model(smtlib: smt.SMTLIB, solver: smt.Solver) -> smt.Responses:
     """Send command to any smt solver and returns a boolean per (check-sat)
     """
 
@@ -322,7 +322,7 @@ def send_smtlib_model(smtlib: smt.SMTLIB, solver_type: smt.SolverType) -> smt.Re
         f.write(smtlib)
         f.close()
         p = subprocess.Popen(smt.get_subprocess_file(
-            solver_type, fullpath), stderr=subprocess.PIPE, stdout=subprocess.PIPE)
+            solver, fullpath), stderr=subprocess.PIPE, stdout=subprocess.PIPE)
         p.wait()
     assert p.stderr is not None
     assert p.stdout is not None
@@ -413,7 +413,7 @@ def diagnose_error(func: dsa.Function, node_name: source.NodeName, prog: ap.Assu
         prog, prelude_files=prelude_files, assert_ok_nodes=not_taken_path.union(set(successors)), with_model=True)
 
     succ_model = send_smtlib_model(
-        succ_smtlib_with_model, smt.SolverZ3())
+        succ_smtlib_with_model, smt.Solver.Z3)
 
     node_vars = set(
         map(ap.convert_expr_var, source.used_variables_in_node(node)))

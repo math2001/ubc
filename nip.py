@@ -91,9 +91,9 @@ def make_state_update_for_node(node: source.Node[source.ProgVarName], new_variab
 
 
 def make_protection_for_node(node: source.Node[source.ProgVarName]) -> Tuple[Set[source.ExprVarT[GuardVarName]], source.ExprT[GuardVarName]]:
-    variables: Set[source.ExprVarT[GuardVarName]] = set([])
-    guards: Tuple[source.ExprVarT[GuardVarName], ...] = tuple([guard_var(
-        v) for v in source.used_variables_in_node(node) if not source.is_loop_counter_name(v.name)])
+    variables: Set[source.ExprVarT[GuardVarName]] = set()
+    guards: Tuple[source.ExprVarT[GuardVarName], ...] = tuple(guard_var(
+        v) for v in source.used_variables_in_node(node) if not source.is_loop_counter_name(v.name))
     variables = set(guards)
 
     # return variables, source.ExprOp(source.type_bool, source.Operator.AND, guards)
